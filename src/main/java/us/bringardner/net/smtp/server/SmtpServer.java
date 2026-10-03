@@ -8,7 +8,6 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -16,6 +15,7 @@ import java.util.Properties;
 import javax.net.ssl.SSLContext;
 
 import us.bringardner.core.ILogger.Level;
+import us.bringardner.core.util.AddressMatcher;
 import us.bringardner.io.filesource.FileSource;
 import us.bringardner.io.filesource.FileSourceFactory;
 import us.bringardner.net.email.Message;
@@ -70,7 +70,8 @@ public class SmtpServer extends Server implements SMTP {
 	private volatile int timeout = Integer.getInteger(P + "timeout", 5 * 60 * 1000);
 	private volatile int loginFailureDelay = Integer.getInteger(P + "loginFailureDelay", 1000);
 	private volatile int maxHops = Integer.getInteger(P + "maxHops", 100);
-	private final List<Cidr> relayNetworks = new ArrayList<>();
+	//  Replaced (not changed) when a network is added, so isRelayAllowed needs no lock
+	private volatile AddressMatcher relayNetworks = AddressMatcher.NONE;
 
 	private FileSource maildropRoot;
 	private FileSourceFactory factory = FileSourceFactory.getDefaultFactory();
@@ -210,11 +211,7 @@ public class SmtpServer extends Server implements SMTP {
 		}
 		String networks = System.getProperty(P + "relayNetworks");
 		if (networks != null) {
-			for (String n : networks.split(",")) {
-				if (!n.trim().isEmpty()) {
-					relayNetworks.add(Cidr.parse(n.trim()));
-				}
-			}
+			relayNetworks = relayNetworks.and(AddressMatcher.parse(networks));
 		}
 		c.setPostmaster(System.getProperty(P + "postmaster", "postmaster"));
 		String aliases = System.getProperty(P + "aliases");
@@ -427,12 +424,7 @@ public class SmtpServer extends Server implements SMTP {
 
 	/** True if the client address may relay without logging in. */
 	public boolean isRelayAllowed(InetAddress client) {
-		for (Cidr c : relayNetworks) {
-			if (c.contains(client)) {
-				return true;
-			}
-		}
-		return false;
+		return relayNetworks.matches(client);
 	}
 
 	// ------------------------------------------------------------------ settings
@@ -523,44 +515,15 @@ public class SmtpServer extends Server implements SMTP {
 		this.maxHops = maxHops;
 	}
 
-	/** Networks (e.g. "127.0.0.1/32", "10.0.0.0/8", "::1/128") that may relay without AUTH. */
-	public void addRelayNetwork(String cidr) {
-		relayNetworks.add(Cidr.parse(cidr));
+	/**
+	 * Networks (e.g. "127.0.0.1/32", "10.0.0.0/8", "::1/128") that may relay without AUTH. Several may be
+	 * given at once, separated by commas or spaces. Only address literals are accepted, never host names.
+	 *
+	 * @throws IllegalArgumentException for an entry that is not an address or network (a host name,
+	 *  or a prefix length that doesn't fit the address, such as /33 or /-1)
+	 */
+	public synchronized void addRelayNetwork(String cidr) {
+		relayNetworks = relayNetworks.and(AddressMatcher.parse(cidr));
 	}
 
-	/** An address range. */
-	static final class Cidr {
-		final byte[] net;
-		final int bits;
-
-		Cidr(byte[] net, int bits) {
-			this.net = net;
-			this.bits = bits;
-		}
-
-		static Cidr parse(String s) {
-			int slash = s.indexOf('/');
-			try {
-				byte[] a = InetAddress.getByName(slash < 0 ? s : s.substring(0, slash)).getAddress();
-				int bits = slash < 0 ? a.length * 8 : Integer.parseInt(s.substring(slash + 1));
-				return new Cidr(a, bits);
-			} catch (IOException | NumberFormatException e) {
-				throw new IllegalArgumentException("Invalid network " + s, e);
-			}
-		}
-
-		boolean contains(InetAddress addr) {
-			byte[] a = addr.getAddress();
-			if (a.length != net.length) {
-				return false;
-			}
-			for (int i = 0; i < bits; i++) {
-				int mask = 0x80 >> (i % 8);
-				if ((a[i / 8] & mask) != (net[i / 8] & mask)) {
-					return false;
-				}
-			}
-			return true;
-		}
-	}
 }

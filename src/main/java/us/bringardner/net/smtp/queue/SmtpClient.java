@@ -8,7 +8,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -18,13 +17,11 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
+import us.bringardner.core.util.TlsSockets;
+import us.bringardner.core.util.TrustAllCertificates;
 import us.bringardner.net.smtp.SmtpInput;
 import us.bringardner.net.smtp.SmtpStreams;
 
@@ -188,36 +185,10 @@ public class SmtpClient implements Closeable {
 			return r;
 		}
 		try {
-			SSLContext ctx;
-			if (verify) {
-				ctx = SSLContext.getDefault();
-			} else {
-				ctx = SSLContext.getInstance("TLS");
-				ctx.init(null, new TrustManager[] {new X509TrustManager() {
-					@Override
-					public void checkClientTrusted(X509Certificate[] chain, String authType) {
-					}
-
-					@Override
-					public void checkServerTrusted(X509Certificate[] chain, String authType) {
-					}
-
-					@Override
-					public X509Certificate[] getAcceptedIssuers() {
-						return new X509Certificate[0];
-					}
-				}}, null);
-			}
-			SSLSocket ssl = (SSLSocket) ctx.getSocketFactory().createSocket(socket, host, socket.getPort(), true);
-			ssl.setUseClientMode(true);
-			SSLParameters params = ssl.getSSLParameters();
-			if (verify) {
-				params.setEndpointIdentificationAlgorithm("HTTPS");
-			}
-			if (host.indexOf(':') < 0 && !host.matches("[0-9.]+")) { // SNI is for names, not addresses
-				params.setServerNames(List.of(new SNIHostName(host)));
-			}
-			ssl.setSSLParameters(params);
+			//  Opportunistic TLS (verify false) accepts any certificate, see TrustAllCertificates
+			SSLContext ctx = verify ? SSLContext.getDefault() : TrustAllCertificates.sslContext("TLS");
+			//  SNI for a host name (not an address) and, with verify, the host name check
+			SSLSocket ssl = TlsSockets.layer(ctx, socket, host, true, verify, true);
 			ssl.setSoTimeout(readTimeout);
 			ssl.startHandshake();
 			socket = ssl;
