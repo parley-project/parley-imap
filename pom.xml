@@ -114,6 +114,15 @@
 	<url>http://bringardner.us/BJL/BjlEmail</url>
 	<inceptionYear>2026</inceptionYear>
 
+	<!-- bjl_core (and the other BJL packages) are published to GitHub Packages; the id matches the
+	     <server> with the GitHub credentials in ~/.m2/settings.xml. -->
+	<repositories>
+		<repository>
+			<id>github</id>
+			<url>https://maven.pkg.github.com/tony-bringardner/BjlCore</url>
+		</repository>
+	</repositories>
+
 	<dependencies>
 		<dependency>
   			<groupId>us.bringardner</groupId>
