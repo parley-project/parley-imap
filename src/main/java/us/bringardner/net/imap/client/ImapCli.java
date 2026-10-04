@@ -26,6 +26,7 @@ import java.util.Set;
 import us.bringardner.net.email.Address;
 import us.bringardner.net.framework.client.DynamicTrustManager;
 import us.bringardner.net.framework.client.DynamicTrustManager.CertificateValidator.ManageAs;
+import us.bringardner.core.util.Hex;
 
 /**
  * A command-line IMAP client built on {@link ImapClient}: an interactive shell,
@@ -288,11 +289,7 @@ public class ImapCli {
 			out.println("  Valid:    " + cert.getNotBefore() + " to " + cert.getNotAfter());
 			try {
 				byte[] d = MessageDigest.getInstance("SHA-256").digest(cert.getEncoded());
-				StringBuilder sb = new StringBuilder();
-				for (byte b : d) {
-					sb.append(sb.length() > 0 ? ":" : "").append(String.format("%02X", b));
-				}
-				out.println("  SHA-256:  " + sb);
+				out.println("  SHA-256:  " + Hex.encode(d, true, ":"));
 			} catch (Exception e) {
 				// no fingerprint
 			}

@@ -46,6 +46,8 @@ import us.bringardner.net.framework.client.Client;
 import us.bringardner.net.framework.client.DynamicTrustManager;
 import us.bringardner.net.imap.server.ImapInput;
 import us.bringardner.net.imap.server.ModifiedUtf7;
+import us.bringardner.core.NamedThreadFactory;
+import us.bringardner.io.IoUtils;
 
 /**
  * An IMAP client (IMAP4rev2, RFC 9051, and IMAP4rev1, RFC 3501), designed to be
@@ -140,11 +142,7 @@ public class ImapClient implements AutoCloseable {
 		if (config.getEventExecutor() != null) {
 			events = config.getEventExecutor();
 		} else {
-			ownEvents = Executors.newSingleThreadExecutor(r -> {
-				Thread t = new Thread(r, "ImapClient-events");
-				t.setDaemon(true);
-				return t;
-			});
+			ownEvents = Executors.newSingleThreadExecutor(new NamedThreadFactory("ImapClient-events"));
 			events = ownEvents;
 		}
 	}
@@ -206,11 +204,7 @@ public class ImapClient implements AutoCloseable {
 	 */
 	public synchronized <T> CompletableFuture<T> submit(ImapTask<T> task) {
 		if (worker == null) {
-			worker = Executors.newSingleThreadExecutor(r -> {
-				Thread t = new Thread(r, "ImapClient-worker");
-				t.setDaemon(true);
-				return t;
-			});
+			worker = Executors.newSingleThreadExecutor(new NamedThreadFactory("ImapClient-worker"));
 		}
 		CompletableFuture<T> f = new CompletableFuture<>();
 		worker.execute(() -> {
@@ -390,11 +384,7 @@ public class ImapClient implements AutoCloseable {
 		idleStopRequested = true;
 		Client c = connection;
 		if (c != null) {
-			try {
-				c.close();
-			} catch (IOException e) {
-				// ignore
-			}
+			IoUtils.closeQuietly(c);
 		}
 	}
 

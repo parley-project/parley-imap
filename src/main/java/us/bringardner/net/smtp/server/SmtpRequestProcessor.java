@@ -35,6 +35,7 @@ import us.bringardner.net.smtp.queue.HeaderRewriter;
 import us.bringardner.net.smtp.queue.MailQueue;
 import us.bringardner.net.smtp.queue.QueueEntry;
 import us.bringardner.net.smtp.queue.QueuedRecipient;
+import us.bringardner.io.IoUtils;
 
 /**
  * One SMTP session (RFC 5321). Like the FTP, POP3 and IMAP processors it runs
@@ -124,11 +125,7 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 			} catch (RuntimeException e) {
 				// ignore
 			}
-			try {
-				con.close();
-			} catch (IOException e) {
-				// ignore
-			}
+			IoUtils.closeQuietly(con);
 		}
 	}
 

@@ -11,6 +11,7 @@ import java.util.Map;
 import us.bringardner.io.filesource.FileSource;
 import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.MailPath;
+import us.bringardner.io.IoUtils;
 
 /**
  * Hands a queued message to the next server for a domain: the domain's MX hosts
@@ -134,7 +135,7 @@ public final class RemoteDelivery {
 								+ e.getMessage(), null, mta));
 					}
 					// opportunistic: try again without TLS
-					closeQuietly(c);
+					IoUtils.closeQuietly(c);
 					return attempt(entry, content, rcpts, route, smartHost, false);
 				}
 			} else if (tlsMode == DeliveryConfig.TlsMode.REQUIRED) {
@@ -152,7 +153,7 @@ public final class RemoteDelivery {
 			throw new HostFailure(new DeliveryException(false, "4.4.2", "Connection to " + route + " failed: " + e.getMessage(),
 					null, mta));
 		} finally {
-			closeQuietly(c);
+			IoUtils.closeQuietly(c);
 		}
 	}
 
@@ -259,11 +260,4 @@ public final class RemoteDelivery {
 		return results;
 	}
 
-	private static void closeQuietly(SmtpClient c) {
-		try {
-			c.close();
-		} catch (IOException e) {
-			// ignore
-		}
-	}
 }

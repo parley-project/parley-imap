@@ -28,6 +28,7 @@ import us.bringardner.net.smtp.SmtpStreams;
 import us.bringardner.net.smtp.dkim.Dkim;
 import us.bringardner.net.smtp.dkim.DkimSigner;
 import us.bringardner.net.smtp.dkim.HeaderFields;
+import us.bringardner.core.NamedThreadFactory;
 
 /**
  * The persistent mail queue of the SMTP server. A message accepted by the server
@@ -107,11 +108,7 @@ public class MailQueue {
 			}
 		}
 		running = true;
-		workers = Executors.newFixedThreadPool(config.getWorkers(), r -> {
-			Thread t = new Thread(r, "SmtpQueueWorker");
-			t.setDaemon(true);
-			return t;
-		});
+		workers = Executors.newFixedThreadPool(config.getWorkers(), new NamedThreadFactory("SmtpQueueWorker"));
 		scheduler = new Thread(this::schedule, "SmtpQueue");
 		scheduler.setDaemon(true);
 		scheduler.start();

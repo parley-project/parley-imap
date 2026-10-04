@@ -25,6 +25,7 @@ import us.bringardner.net.imap.server.ImapCommand.State;
 import us.bringardner.net.imap.server.store.MailStore;
 import us.bringardner.net.imap.server.store.Mailbox;
 import us.bringardner.net.imap.server.store.MailboxView;
+import us.bringardner.io.IoUtils;
 
 /**
  * One IMAP session (RFC 9051). Like FtpRequestProcessor and
@@ -109,11 +110,7 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 			} catch (RuntimeException e) {
 				// ignore
 			}
-			try {
-				con.close();
-			} catch (IOException e) {
-				// ignore
-			}
+			IoUtils.closeQuietly(con);
 		}
 	}
 
