@@ -15,6 +15,7 @@ import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
+import us.bringardner.io.IoUtils;
 
 /**
  * MX lookup with the JDK's DNS provider (RFC 5321 section 5.1): MX records by
@@ -60,11 +61,8 @@ public class DnsMxResolver implements MxResolver {
 			throw DeliveryException.temporary("4.4.3", "DNS lookup of " + domain + " failed: " + e.getMessage());
 		} finally {
 			if (ctx != null) {
-				try {
-					ctx.close();
-				} catch (NamingException e) {
-					// ignore
-				}
+				//  DirContext isn't AutoCloseable (it's older); the method reference adapts it
+				IoUtils.closeQuietly(ctx::close);
 			}
 		}
 		if (mx.isEmpty()) {
