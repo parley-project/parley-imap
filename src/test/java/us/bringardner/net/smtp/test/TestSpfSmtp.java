@@ -46,6 +46,7 @@ public class TestSpfSmtp {
 		zone.put("helo.test", records("SPF", "v=spf1 a -all", "A", "127.0.0.1", "AAAA", "::1"));
 		zone.put("slow.test", Arrays.asList("TIMEOUT"));
 		b.getSpf().setDns(new TestSpfSuite.Zone(zone));
+		b.getDmarc().setDns(TestDkim.keys(new HashMap<>())::txt);
 		b.startAndWait(10000);
 	}
 
@@ -110,7 +111,7 @@ public class TestSpfSmtp {
 		assertTrue(m.contains("envelope-from=\"a@pass.test\";"), m);
 		assertTrue(m.contains("helo=client.pass.test;"), m);
 		assertTrue(m.contains("identity=mailfrom;"), m);
-		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=pass smtp.mailfrom=pass.test;\r\n\tdkim=none\r\n"), m);
+		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=pass smtp.mailfrom=pass.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=pass.test\r\n"), m);
 		assertTrue(m.indexOf("\r\nReceived: from client.pass.test") < m.indexOf("\r\nReceived-SPF:"), "after our Received: " + m);
 	}
 
@@ -172,7 +173,7 @@ public class TestSpfSmtp {
 		try {
 			String m = deliver("client.example", "a@fail.test", "From: a@fail.test\r\nSubject: spf off\r\n\r\nhi\r\n", "spf off");
 			assertFalse(m.contains("Received-SPF"), m);
-			assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=none\r\n"), m);
+			assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=fail.test\r\n"), m);
 		} finally {
 			b.getSpf().setCheck(true);
 		}

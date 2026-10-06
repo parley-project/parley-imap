@@ -291,6 +291,7 @@ public class TestBjlDnsMxResolver {
 			b.addLocalDomain(domain);
 			b.getLogger().setLevel(us.bringardner.core.ILogger.Level.ERROR);
 			b.getSpf().setDns(resolver()::records); // SPF from the test DNS server, not the real one
+			b.getDmarc().setDns(resolver()::txt);
 			b.startAndWait(10000);
 
 			a.setMaildropRoot(rootA);

@@ -394,6 +394,18 @@ For mail from other servers (clients that are neither authenticated nor in `JSmt
 - **DNS:** queries use the `bjldns` resolver's DNS servers when `JSmtp.resolver=bjldns` (or `bjldns-iterative`). Otherwise they go to the servers in `/etc/resolv.conf` through BjlDns.
 - **Turning it off:** set `JSmtp.spf.check=false`.
 
+### DMARC (RFC 7489)
+
+For mail from other servers, the server combines the SPF and DKIM results with the policy the From domain publishes at `_dmarc.<domain>`. The code is in `us.bringardner.net.smtp.dmarc`.
+
+- **Pass:** the message passes if a DKIM signature passed with a `d=` domain, or SPF passed with a domain, that is *aligned* with the From domain. Aligned means the same domain (strict, `adkim=s`/`aspf=s`), or the same organizational domain (relaxed, the default): `news.example.com` aligns with `example.com`.
+- **Organizational domains** come from the Public Suffix List. A copy (`public_suffix_list.dat`, MPL 2.0, from publicsuffix.org) is included. Point `JSmtp.dmarc.publicSuffixList` at a newer download to replace it.
+- **Policy lookup:** the record at `_dmarc.<From domain>`, else at `_dmarc.<organizational domain>`, where `sp=` applies to subdomains. A record whose `p=` is missing or invalid counts as `p=none` if it has a valid `rua=`; otherwise it is ignored. `pct=` sampling is honoured: mail outside the sample gets one step milder treatment.
+- **Recording the result:** it is added to Authentication-Results, e.g. `dmarc=fail (p=reject dis=reject) header.from=example.org`. The results are `pass`, `fail`, `none` (no policy), `temperror` (DNS) or `permerror` (no From field, several From fields, or From addresses in more than one domain).
+- **Enforcing:** with `JSmtp.dmarc.enforce=true`, `p=reject` is refused at the end of DATA with `550 5.7.1 Rejected by the DMARC policy of <domain>`. `p=quarantine` is delivered to the recipient's Junk mailbox: the IMAP `\Junk` mailbox, created if missing. Without it (the default) the result is only recorded.
+- **DNS:** lookups use BjlDns, the same way as DKIM keys.
+- **Turning it off:** set `JSmtp.dmarc.check=false`.
+
 ### Configuration
 
 | Property | Default | Meaning |
@@ -419,11 +431,14 @@ For mail from other servers (clients that are neither authenticated nor in `JSmt
 | `JSmtp.dkim.verify` | true | Verify DKIM signatures of incoming mail and add Authentication-Results |
 | `JSmtp.spf.check` | true | Check SPF for incoming mail and add Received-SPF and Authentication-Results |
 | `JSmtp.spf.rejectFail` | false | Refuse MAIL FROM when the SPF result is `fail` (550 5.7.23) |
+| `JSmtp.dmarc.check` | true | Check DMARC for incoming mail and add the result to Authentication-Results |
+| `JSmtp.dmarc.enforce` | false | Act on the policy: refuse `p=reject` mail (550 5.7.1), deliver `p=quarantine` mail to Junk |
+| `JSmtp.dmarc.publicSuffixList` | the included copy | A newer `public_suffix_list.dat` for organizational domains |
 | `SmtpServer.KeyStoreName`, `SmtpServer.KeyStorePassword`, `SmtpServer.KeyStoreType` | none | Key store for STARTTLS and port 465 |
 
 ### Not included
 
-- **DMARC and spam filtering:** DKIM and SPF are supported (see above), but DMARC (RFC 7489) checks and spam filtering are not.
+- **DMARC reports and spam filtering:** DKIM, SPF and DMARC are checked (see above), but DMARC aggregate and failure reports (`rua=`, `ruf=`) aren't sent, ARC (RFC 8617) isn't supported, and there is no spam filtering.
 - **Envelope sender:** authenticated users may use any address as the sender; it isn't checked against the login.
 - **Optional extensions:** REQUIRETLS, MT-PRIORITY and DELIVERBY aren't implemented.
 
@@ -442,6 +457,8 @@ For mail from other servers (clients that are neither authenticated nor in `JSmt
 `TestDkim` checks signing and verification against the RFC 8463 example message (RSA and Ed25519) and the RFC 6376 canonicalization examples. `TestDkimSmtp` runs a signing server that relays to a verifying one, and covers forged Authentication-Results, signed bounces, and mail queued from code. `TestBjlDnsMxResolver` looks a DKIM key up from a BjlDns server.
 
 `TestSpfSuite` runs the openspf.org RFC 7208 test suite (`src/test/resources/spf/rfc7208-tests.yml`, from pyspf), and all 203 cases pass. `TestSpfSmtp` covers how results are recorded, rejection, the HELO check for bounces, and forged headers. `TestBjlDnsMxResolver` runs SPF checks against a BjlDns server.
+
+`TestDmarc` runs the publicsuffix.org test file against the included Public Suffix List. It also covers record parsing, strict and relaxed alignment, `sp=`, `pct=` sampling, DNS errors and bad From fields. `TestDmarcSmtp` covers an aligned pass through a signing relay, a forged From (recorded, or refused when enforcing), quarantine to Junk, and an aligned SPF pass.
 
 `TestBjlDnsMxResolver` starts a real BjlDns `DnsServer` on a free port on 127.0.0.1, with zone files written to a temp directory (`mx.test` with two MX hosts, `implicit.test` with only an A record, `nullmx.test` with a null MX). It checks `BjlDnsMxResolver` against it, including a host with both A and AAAA records and an IPv6-only host (`v6only.test`), and relays messages between two SMTP servers using the MX hosts it finds: over IPv4, over IPv6 (`::1`), and from an unreachable IPv6 address to the host's IPv4 address. The IPv6 relay test is skipped on machines without an IPv6 loopback.
 

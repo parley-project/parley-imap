@@ -52,6 +52,8 @@ public final class QueueEntry {
 	long size;
 	/** Who submitted it (authenticated user), or null. */
 	String submitter;
+	/** Deliver locally to the Junk mailbox, not INBOX (a DMARC quarantine policy). */
+	boolean quarantine;
 	final List<QueuedRecipient> recipients = new ArrayList<>();
 
 	public QueueEntry(String id) {
@@ -122,6 +124,15 @@ public final class QueueEntry {
 		this.submitter = submitter;
 	}
 
+	public boolean isQuarantine() {
+		return quarantine;
+	}
+
+	/** Local delivery goes to the recipient's Junk mailbox (DMARC p=quarantine). */
+	public void setQuarantine(boolean quarantine) {
+		this.quarantine = quarantine;
+	}
+
 	public List<QueuedRecipient> getRecipients() {
 		return recipients;
 	}
@@ -170,6 +181,9 @@ public final class QueueEntry {
 			w.write("UTF8\t" + (smtpUtf8 ? "1" : "0") + "\n");
 			w.write("SIZE\t" + size + "\n");
 			w.write("SUBMITTER\t" + clean(submitter) + "\n");
+			if (quarantine) {
+				w.write("QUARANTINE\t1\n");
+			}
 			for (QueuedRecipient r : recipients) {
 				w.write("R\t" + r.address + "\t" + r.status + "\t" + r.attempts + "\t" + r.nextAttempt + "\t"
 						+ QueuedRecipient.formatNotify(r.notify) + "\t" + (r.delayNotified ? "1" : "0") + "\t" + clean(r.orcpt)
@@ -226,6 +240,9 @@ public final class QueueEntry {
 					break;
 				case "SUBMITTER":
 					e.submitter = v.isEmpty() ? null : v;
+					break;
+				case "QUARANTINE":
+					e.quarantine = "1".equals(v);
 					break;
 				case "R": {
 					QueuedRecipient q = new QueuedRecipient(MailAddress.parse(p[1], true), p[7].isEmpty() ? null : p[7],

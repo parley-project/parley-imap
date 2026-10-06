@@ -35,6 +35,9 @@ import us.bringardner.net.smtp.queue.HeaderRewriter;
 import us.bringardner.net.smtp.queue.MailQueue;
 import us.bringardner.net.smtp.queue.QueueEntry;
 import us.bringardner.net.smtp.queue.QueuedRecipient;
+import us.bringardner.net.smtp.queue.DeliveryConfig;
+import us.bringardner.net.smtp.dmarc.DmarcRecord;
+import us.bringardner.net.smtp.dmarc.DmarcResult;
 import us.bringardner.net.smtp.spf.Spf;
 import us.bringardner.net.smtp.spf.SpfResult;
 import us.bringardner.io.IoUtils;
@@ -553,13 +556,23 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 			}
 			insertAfterTrace(t, add.toString());
 		}
+		boolean quarantine = false;
 		if (mayRelay()) {
 			// our own users' mail: sign it with the key of its From domain, if any
 			getQueue().dkimSign(t.id, t.incoming);
 		} else {
-			addAuthenticationResults(t);
+			DmarcResult dmarc = addAuthenticationResults(t);
+			if (dmarc != null && dmarc.getResult() == DmarcResult.Result.FAIL && getQueue().getConfig().getDmarc().isEnforce()) {
+				if (dmarc.getDisposition() == DmarcRecord.Policy.REJECT) {
+					abortTransaction();
+					reply(MAILBOX_UNAVAILABLE, "5.7.1", "Rejected by the DMARC policy of " + dmarc.getFromDomain());
+					return;
+				}
+				quarantine = dmarc.getDisposition() == DmarcRecord.Policy.QUARANTINE;
+			}
 		}
 		QueueEntry e = new QueueEntry(t.id);
+		e.setQuarantine(quarantine);
 		e.setFrom(t.from);
 		e.setBody(t.body);
 		e.setSmtpUtf8(t.smtpUtf8);
@@ -602,24 +615,36 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 	}
 
 	/**
-	 * Record the SPF result (Received-SPF, RFC 7208 section 9.1) and verify the
-	 * message's DKIM signatures, and put both results in an
-	 * Authentication-Results field (RFC 8601) after our Received field.
-	 * Authentication-Results fields that claim to be from this server are
-	 * removed (section 5). The message is accepted whatever the results.
+	 * Record the SPF result (Received-SPF, RFC 7208 section 9.1), verify the
+	 * message's DKIM signatures, evaluate DMARC (RFC 7489), and put the results
+	 * in an Authentication-Results field (RFC 8601) after our Received field.
+	 * Authentication-Results and Received-SPF fields that claim to be from
+	 * this server are removed (section 5).
+	 *
+	 * @return the DMARC result (null if DMARC is not checked)
 	 */
-	private void addAuthenticationResults(Transaction t) throws IOException {
-		boolean dkim = getQueue().getConfig().getDkim().isVerify();
-		if (t.spf == null && !dkim) {
-			return;
+	private DmarcResult addAuthenticationResults(Transaction t) throws IOException {
+		DeliveryConfig config = getQueue().getConfig();
+		boolean dkim = config.getDkim().isVerify();
+		boolean dmarcOn = config.getDmarc().isCheck();
+		if (t.spf == null && !dkim && !dmarcOn) {
+			return null;
 		}
 		String host = getSmtpServer().getHostname();
 		List<DkimResult> results = new ArrayList<>();
 		if (dkim) {
 			try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
-				results = getQueue().getConfig().getDkim().verify(i);
+				results = config.getDkim().verify(i);
 			} catch (IOException | RuntimeException e) {
 				logError("DKIM verification of " + t.id + " failed", e);
+			}
+		}
+		DmarcResult dmarc = null;
+		if (dmarcOn) {
+			try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
+				dmarc = config.getDmarc().checker().check(HeaderFields.read(i), t.spf, results);
+			} catch (IOException | RuntimeException e) {
+				logError("DMARC check of " + t.id + " failed", e);
 			}
 		}
 		StringBuilder fields = new StringBuilder();
@@ -630,13 +655,19 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		if (t.spf != null) {
 			ar.append(";\r\n\t").append(t.spf.toAuthResults());
 		}
-		for (DkimResult r : results) {
-			ar.append(";\r\n\t").append(r.toAuthResults());
+		if (dkim) {
+			for (DkimResult r : results) {
+				ar.append(";\r\n\t").append(r.toAuthResults());
+			}
+		}
+		if (dmarc != null) {
+			ar.append(";\r\n\t").append(dmarc.toAuthResults());
 		}
 		fields.append(ar).append("\r\n");
 		HeaderRewriter.insertAfterFirst(t.incoming, getQueue().incoming(t.id + "a"), fields.toString(),
 				f -> (f.is("Authentication-Results") && host.equalsIgnoreCase(authServId(f.getValue())))
 						|| (f.is("Received-SPF") && t.spf != null && claimsReceiver(f.getValue(), host)));
+		return dmarc;
 	}
 
 	/** True if a Received-SPF value names this server as the receiver (a forged one). */

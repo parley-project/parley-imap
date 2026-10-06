@@ -29,6 +29,8 @@ import us.bringardner.net.framework.server.Server;
 import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SMTP;
 import us.bringardner.net.smtp.dkim.Dkim;
+import us.bringardner.net.smtp.dmarc.Dmarc;
+import us.bringardner.net.smtp.dmarc.PublicSuffixList;
 import us.bringardner.net.smtp.spf.Spf;
 import us.bringardner.net.smtp.queue.BjlDnsMxResolver;
 import us.bringardner.net.smtp.queue.DeliveryConfig;
@@ -285,6 +287,20 @@ public class SmtpServer extends Server implements SMTP {
 		}
 		spf.setCheck(Boolean.parseBoolean(System.getProperty(P + "spf.check", "true")));
 		spf.setRejectFail(Boolean.getBoolean(P + "spf.rejectFail"));
+		Dmarc dmarc = c.getDmarc();
+		if (c.getResolver() instanceof BjlDnsMxResolver) {
+			dmarc.setDns(((BjlDnsMxResolver) c.getResolver())::txt);
+		}
+		dmarc.setCheck(Boolean.parseBoolean(System.getProperty(P + "dmarc.check", "true")));
+		dmarc.setEnforce(Boolean.getBoolean(P + "dmarc.enforce"));
+		tmp = System.getProperty(P + "dmarc.publicSuffixList");
+		if (tmp != null && !tmp.isBlank()) {
+			try {
+				dmarc.setPublicSuffixList(PublicSuffixList.load(new File(tmp)));
+			} catch (IOException e) {
+				logError("Can't read the public suffix list " + tmp + "; using the included copy", e);
+			}
+		}
 		c.setWorkers(Integer.getInteger(P + "queue.workers", 4));
 		tmp = System.getProperty(P + "queue.retry");
 		if (tmp != null) {
@@ -451,6 +467,11 @@ public class SmtpServer extends Server implements SMTP {
 	 */
 	public Dkim getDkim() {
 		return getDeliveryConfig().getDkim();
+	}
+
+	/** DMARC settings (shared by the servers that share a queue). */
+	public Dmarc getDmarc() {
+		return getDeliveryConfig().getDmarc();
 	}
 
 	/** SPF settings (shared by the servers that share a queue). */

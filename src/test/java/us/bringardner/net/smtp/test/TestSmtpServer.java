@@ -120,6 +120,7 @@ public class TestSmtpServer {
 		s.setLoginFailureDelay(0);
 		s.getLogger().setLevel(Level.ERROR);
 		s.getSpf().setDns(new TestSpfSuite.Zone(new java.util.HashMap<>())); // SPF without real DNS: every domain has none
+		s.getDmarc().setDns(TestDkim.keys(new java.util.HashMap<>())::txt); // nor DMARC: no policy records
 		return s;
 	}
 
