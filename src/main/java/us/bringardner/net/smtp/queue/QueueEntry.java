@@ -54,6 +54,10 @@ public final class QueueEntry {
 	String submitter;
 	/** Deliver locally to the Junk mailbox, not INBOX (a DMARC quarantine policy). */
 	boolean quarantine;
+	/** Received from another server (not submitted by a user or trusted client): forwarded copies are ARC-sealed. */
+	boolean inbound;
+	/** Our ARC set has been added. */
+	boolean arcSealed;
 	final List<QueuedRecipient> recipients = new ArrayList<>();
 
 	public QueueEntry(String id) {
@@ -133,6 +137,19 @@ public final class QueueEntry {
 		this.quarantine = quarantine;
 	}
 
+	public boolean isInbound() {
+		return inbound;
+	}
+
+	/** The message came from another server; copies forwarded to other servers get an ARC set (RFC 8617). */
+	public void setInbound(boolean inbound) {
+		this.inbound = inbound;
+	}
+
+	public boolean isArcSealed() {
+		return arcSealed;
+	}
+
 	public List<QueuedRecipient> getRecipients() {
 		return recipients;
 	}
@@ -183,6 +200,12 @@ public final class QueueEntry {
 			w.write("SUBMITTER\t" + clean(submitter) + "\n");
 			if (quarantine) {
 				w.write("QUARANTINE\t1\n");
+			}
+			if (inbound) {
+				w.write("INBOUND\t1\n");
+			}
+			if (arcSealed) {
+				w.write("ARC\t1\n");
 			}
 			for (QueuedRecipient r : recipients) {
 				w.write("R\t" + r.address + "\t" + r.status + "\t" + r.attempts + "\t" + r.nextAttempt + "\t"
@@ -243,6 +266,12 @@ public final class QueueEntry {
 					break;
 				case "QUARANTINE":
 					e.quarantine = "1".equals(v);
+					break;
+				case "INBOUND":
+					e.inbound = "1".equals(v);
+					break;
+				case "ARC":
+					e.arcSealed = "1".equals(v);
 					break;
 				case "R": {
 					QueuedRecipient q = new QueuedRecipient(MailAddress.parse(p[1], true), p[7].isEmpty() ? null : p[7],

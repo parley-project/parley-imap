@@ -29,6 +29,7 @@ import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SMTP;
 import us.bringardner.net.smtp.SmtpInput;
 import us.bringardner.net.smtp.SmtpStreams;
+import us.bringardner.net.smtp.dkim.ArcResult;
 import us.bringardner.net.smtp.dkim.DkimResult;
 import us.bringardner.net.smtp.dkim.HeaderFields;
 import us.bringardner.net.smtp.queue.HeaderRewriter;
@@ -564,11 +565,17 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 			AuthResults auth = addAuthenticationResults(t);
 			DmarcResult dmarc = auth == null ? null : auth.dmarc;
 			DmarcRecord.Policy applied = DmarcRecord.Policy.NONE;
+			String override = null;
 			if (dmarc != null && dmarc.getResult() == DmarcResult.Result.FAIL && getQueue().getConfig().getDmarc().isEnforce()) {
 				applied = dmarc.getDisposition();
+				if (applied != DmarcRecord.Policy.NONE && trustedArc(auth.arc)) {
+					// a trusted intermediary vouches for the original authentication (RFC 8617 section 7.2)
+					applied = DmarcRecord.Policy.NONE;
+					override = auth.arc.toReportComment();
+				}
 			}
 			if (dmarc != null) {
-				report(t, auth, applied);
+				report(t, auth, applied, override);
 			}
 			if (applied == DmarcRecord.Policy.REJECT) {
 				abortTransaction();
@@ -579,6 +586,7 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		}
 		QueueEntry e = new QueueEntry(t.id);
 		e.setQuarantine(quarantine);
+		e.setInbound(!mayRelay());
 		e.setFrom(t.from);
 		e.setBody(t.body);
 		e.setSmtpUtf8(t.smtpUtf8);
@@ -633,7 +641,8 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		DeliveryConfig config = getQueue().getConfig();
 		boolean dkim = config.getDkim().isVerify();
 		boolean dmarcOn = config.getDmarc().isCheck();
-		if (t.spf == null && !dkim && !dmarcOn) {
+		boolean arcOn = config.getArc().isVerify();
+		if (t.spf == null && !dkim && !dmarcOn && !arcOn) {
 			return null;
 		}
 		String host = getSmtpServer().getHostname();
@@ -643,6 +652,14 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 				results = config.getDkim().verify(i);
 			} catch (IOException | RuntimeException e) {
 				logError("DKIM verification of " + t.id + " failed", e);
+			}
+		}
+		ArcResult arc = null;
+		if (arcOn) {
+			try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
+				arc = config.getArc().verifier(config.getDkim()).verify(i);
+			} catch (IOException | RuntimeException e) {
+				logError("ARC validation of " + t.id + " failed", e);
 			}
 		}
 		DmarcResult dmarc = null;
@@ -671,34 +688,70 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		if (dmarc != null) {
 			ar.append(";\r\n\t").append(dmarc.toAuthResults());
 		}
+		if (arc != null) {
+			// the chain status our seal records (cv=) when the message is forwarded
+			ar.append(";\r\n\t").append(arc.toAuthResults(clientIp()));
+		}
 		fields.append(ar).append("\r\n");
 		HeaderRewriter.insertAfterFirst(t.incoming, getQueue().incoming(t.id + "a"), fields.toString(),
 				f -> (f.is("Authentication-Results") && host.equalsIgnoreCase(authServId(f.getValue())))
 						|| (f.is("Received-SPF") && t.spf != null && claimsReceiver(f.getValue(), host)));
-		return new AuthResults(dmarc, results, headers, ar.substring("Authentication-Results: ".length()));
+		return new AuthResults(dmarc, results, arc, headers, ar.substring("Authentication-Results: ".length()));
+	}
+
+	/** The client's address without an IPv6 zone. */
+	private String clientIp() {
+		String ip = getClientAddress().getHostAddress();
+		int zone = ip.indexOf('%');
+		return zone > 0 ? ip.substring(0, zone) : ip;
+	}
+
+	/** True if a chain passed and its newest seal is from a trusted sealer (organizational domains compared). */
+	private boolean trustedArc(ArcResult arc) {
+		if (arc == null || !arc.isPass()) {
+			return false;
+		}
+		DeliveryConfig config = getQueue().getConfig();
+		List<String> trusted = config.getArc().getTrustedSealers();
+		if (trusted.isEmpty()) {
+			return false;
+		}
+		us.bringardner.net.smtp.dmarc.PublicSuffixList psl = config.getDmarc().getPublicSuffixList();
+		String sealer = psl.organizationalDomain(arc.getLatestSealDomain());
+		if (sealer == null) {
+			return false;
+		}
+		for (String d : trusted) {
+			if (sealer.equalsIgnoreCase(psl.organizationalDomain(d))) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** What addAuthenticationResults found. */
 	private static final class AuthResults {
 		final DmarcResult dmarc;
 		final List<DkimResult> dkim;
+		final ArcResult arc;
 		final HeaderFields headers;
 		final String authResults;
 
-		AuthResults(DmarcResult dmarc, List<DkimResult> dkim, HeaderFields headers, String authResults) {
+		AuthResults(DmarcResult dmarc, List<DkimResult> dkim, ArcResult arc, HeaderFields headers, String authResults) {
 			this.dmarc = dmarc;
 			this.dkim = dkim;
+			this.arc = arc;
 			this.headers = headers;
 			this.authResults = authResults;
 		}
 	}
 
 	/** Pass a DMARC evaluation to the reporter (aggregate and failure reports). */
-	private void report(Transaction t, AuthResults auth, DmarcRecord.Policy applied) {
+	private void report(Transaction t, AuthResults auth, DmarcRecord.Policy applied, String override) {
 		try {
 			String from = t.from == null ? null : t.from.getLocalPart() + "@" + t.from.getAsciiDomain();
 			getQueue().getConfig().getDmarc().getReporter().evaluated(auth.dmarc, getClientAddress(), from, t.spf, auth.dkim, applied,
-					auth.headers, auth.authResults);
+					auth.headers, auth.authResults, override);
 		} catch (RuntimeException e) {
 			logError("DMARC report for " + t.id + " failed", e);
 		}

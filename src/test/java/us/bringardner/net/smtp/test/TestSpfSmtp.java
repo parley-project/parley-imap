@@ -111,7 +111,7 @@ public class TestSpfSmtp {
 		assertTrue(m.contains("envelope-from=\"a@pass.test\";"), m);
 		assertTrue(m.contains("helo=client.pass.test;"), m);
 		assertTrue(m.contains("identity=mailfrom;"), m);
-		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=pass smtp.mailfrom=pass.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=pass.test\r\n"), m);
+		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=pass smtp.mailfrom=pass.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=pass.test;\r\n\tarc=none"), m);
 		assertTrue(m.indexOf("\r\nReceived: from client.pass.test") < m.indexOf("\r\nReceived-SPF:"), "after our Received: " + m);
 	}
 
@@ -173,7 +173,7 @@ public class TestSpfSmtp {
 		try {
 			String m = deliver("client.example", "a@fail.test", "From: a@fail.test\r\nSubject: spf off\r\n\r\nhi\r\n", "spf off");
 			assertFalse(m.contains("Received-SPF"), m);
-			assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=fail.test\r\n"), m);
+			assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=fail.test;\r\n\tarc=none"), m);
 		} finally {
 			b.getSpf().setCheck(true);
 		}

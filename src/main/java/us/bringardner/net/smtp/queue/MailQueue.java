@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import us.bringardner.io.filesource.FileSource;
 import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SmtpStreams;
+import us.bringardner.net.smtp.dkim.Arc;
+import us.bringardner.net.smtp.dkim.ArcSealer;
 import us.bringardner.net.smtp.dkim.Dkim;
 import us.bringardner.net.smtp.dkim.DkimSigner;
 import us.bringardner.net.smtp.dkim.HeaderFields;
@@ -273,6 +275,38 @@ public class MailQueue {
 	}
 
 	/**
+	 * Add our ARC set (RFC 8617) to a received message before it is forwarded
+	 * to another server (an alias with outside members, say), so the next
+	 * receiver can see the results we found even though forwarding may break
+	 * SPF and DKIM. The chain status comes from the arc= result in our
+	 * Authentication-Results field. Done once per message; a failure is logged
+	 * and the message goes unsealed.
+	 */
+	void arcSeal(QueueEntry e, FileSource content) {
+		Arc arc = config.getArc();
+		ArcSealer sealer = arc.sealer(config.getDkim(), config.getHostname());
+		if (sealer == null) {
+			return;
+		}
+		try {
+			String set;
+			try (InputStream in = new BufferedInputStream(content.getInputStream(), 64 * 1024)) {
+				set = sealer.seal(in, config.getHostname());
+			}
+			synchronized (e) {
+				if (set != null) {
+					HeaderRewriter.prepend(content, incoming(e.id + "s"), set);
+					e.size = content.length();
+				}
+				e.arcSealed = true;
+				e.write(envelope(e.id));
+			}
+		} catch (IOException | GeneralSecurityException | RuntimeException ex) {
+			LOG.log(Level.WARNING, "Can't ARC-seal " + e.id + "; it is forwarded unsealed", ex);
+		}
+	}
+
+	/**
 	 * Queue a message from code (e.g. for an application sending mail). The
 	 * content is copied with CRLF line ends.
 	 */
@@ -333,6 +367,9 @@ public class MailQueue {
 					remoteByDomain.computeIfAbsent(key, k -> new ArrayList<>()).add(r);
 				}
 			}
+		}
+		if (!remoteByDomain.isEmpty() && e.inbound && !e.arcSealed) {
+			arcSeal(e, content);
 		}
 		for (Map.Entry<String, List<QueuedRecipient>> group : remoteByDomain.entrySet()) {
 			Map<QueuedRecipient, RemoteDelivery.Result> results = remote.deliver(e, content, group.getValue(), group.getKey());

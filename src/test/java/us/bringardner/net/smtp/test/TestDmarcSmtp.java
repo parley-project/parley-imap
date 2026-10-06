@@ -148,7 +148,7 @@ public class TestDmarcSmtp {
 		assertTrue(r.startsWith("250"), r);
 		String m = waitFor("dmarc pass");
 		assertTrue(m.contains("\tdkim=pass header.d=a.test"), m);
-		assertTrue(m.contains(";\r\n\tdmarc=pass (p=reject dis=none) header.from=a.test\r\n"), m);
+		assertTrue(m.contains(";\r\n\tdmarc=pass (p=reject dis=none) header.from=a.test;\r\n\tarc=none smtp.remote-ip="), m);
 	}
 
 	@Test
@@ -156,7 +156,7 @@ public class TestDmarcSmtp {
 		String r = send(b, "tony@a.test", "From: Tony <tony@a.test>\r\nTo: team1@b.test\r\nSubject: dmarc recorded\r\n\r\nhi\r\n");
 		assertTrue(r.startsWith("250"), r);
 		String m = waitFor("dmarc recorded");
-		assertTrue(m.contains("\r\n\tdmarc=fail (p=reject dis=reject) header.from=a.test\r\n"), m);
+		assertTrue(m.contains("\r\n\tdmarc=fail (p=reject dis=reject) header.from=a.test;\r\n\tarc=none"), m);
 	}
 
 	@Test
@@ -187,10 +187,10 @@ public class TestDmarcSmtp {
 	public void noPolicyAndBadFrom() throws Exception {
 		String r = send(b, "x@nopolicy.test", "From: x@nopolicy.test\r\nTo: team1@b.test\r\nSubject: dmarc none\r\n\r\nhi\r\n");
 		assertTrue(r.startsWith("250"), r);
-		assertTrue(waitFor("dmarc none").contains("\tdmarc=none header.from=nopolicy.test\r\n"));
+		assertTrue(waitFor("dmarc none").contains("\tdmarc=none header.from=nopolicy.test;\r\n\tarc=none"));
 		r = send(b, "x@nopolicy.test", "From: a@x.test\r\nFrom: b@y.test\r\nTo: team1@b.test\r\nSubject: dmarc two\r\n\r\nhi\r\n");
 		assertTrue(r.startsWith("250"), r);
-		assertTrue(waitFor("dmarc two").contains("\tdmarc=permerror reason=\"more than one From field\"\r\n"));
+		assertTrue(waitFor("dmarc two").contains("\tdmarc=permerror reason=\"more than one From field\";\r\n\tarc=none"));
 	}
 
 	private static String report(String subjectStart) {

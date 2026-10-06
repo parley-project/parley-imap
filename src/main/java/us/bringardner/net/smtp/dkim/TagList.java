@@ -18,9 +18,14 @@ final class TagList {
 	static Map<String, String> parse(String text) throws DkimException {
 		Map<String, String> ret = new LinkedHashMap<>();
 		String unfolded = text.replace("\r", "").replace("\n", "");
-		for (String part : unfolded.split(";", -1)) {
+		String[] parts = unfolded.split(";", -1);
+		for (int i = 0; i < parts.length; i++) {
+			String part = parts[i];
 			if (part.trim().isEmpty()) {
-				continue; // an empty spec, e.g. after a trailing ';'
+				if (i == parts.length - 1) {
+					continue; // a trailing ';' is allowed (RFC 6376 section 3.2)
+				}
+				throw DkimException.perm("empty tag in the tag list");
 			}
 			int eq = part.indexOf('=');
 			if (eq < 0) {

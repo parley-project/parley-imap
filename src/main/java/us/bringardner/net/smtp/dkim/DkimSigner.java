@@ -103,6 +103,15 @@ public final class DkimSigner {
 		return algorithm;
 	}
 
+	PrivateKey getKey() {
+		return key;
+	}
+
+	/** Sign data with this signer's key and algorithm (for ARC). */
+	byte[] signBytes(byte[] data) throws GeneralSecurityException {
+		return signData(data);
+	}
+
 	/** The fields to sign when present (names, any case). */
 	public void setHeaders(List<String> headers) {
 		this.headers = lower(headers);

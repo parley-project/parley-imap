@@ -10,6 +10,7 @@ import java.util.Set;
 
 import us.bringardner.io.filesource.FileSource;
 import us.bringardner.net.framework.server.IAccessControlList;
+import us.bringardner.net.smtp.dkim.Arc;
 import us.bringardner.net.smtp.dkim.Dkim;
 import us.bringardner.net.smtp.dmarc.Dmarc;
 import us.bringardner.net.smtp.spf.Spf;
@@ -20,6 +21,7 @@ public class DeliveryConfig {
 	private final Dkim dkim = new Dkim();
 	private final Spf spf = new Spf();
 	private final Dmarc dmarc = new Dmarc();
+	private final Arc arc = new Arc();
 
 	/** TLS for outgoing connections. */
 	public enum TlsMode {
@@ -285,6 +287,11 @@ public class DeliveryConfig {
 	/** DKIM signing keys and verification settings (RFC 6376). */
 	public Dkim getDkim() {
 		return dkim;
+	}
+
+	/** ARC settings (RFC 8617). */
+	public Arc getArc() {
+		return arc;
 	}
 
 	/** DMARC settings (RFC 7489). */

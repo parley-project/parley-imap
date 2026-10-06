@@ -189,12 +189,24 @@ public final class DmarcReporter {
 	 */
 	public void evaluated(DmarcResult dmarc, InetAddress source, String envelopeFrom, SpfResult spf, List<DkimResult> dkim,
 			DmarcRecord.Policy applied, HeaderFields headers, String authResults) {
+		evaluated(dmarc, source, envelopeFrom, spf, dkim, applied, headers, authResults, null);
+	}
+
+	/**
+	 * Report one DMARC evaluation whose policy was overridden for a known
+	 * reason, e.g. a trusted ARC chain (RFC 8617 section 7.2.2).
+	 *
+	 * @param overrideComment the comment of the local_policy override (null for the default)
+	 * @see #evaluated(DmarcResult, InetAddress, String, SpfResult, List, DmarcRecord.Policy, HeaderFields, String)
+	 */
+	public void evaluated(DmarcResult dmarc, InetAddress source, String envelopeFrom, SpfResult spf, List<DkimResult> dkim,
+			DmarcRecord.Policy applied, HeaderFields headers, String authResults, String overrideComment) {
 		if (dmarc == null || dmarc.getRecord() == null || (!aggregate && !failure) || dir == null) {
 			return;
 		}
 		DmarcRecord rec = dmarc.getRecord();
 		if (aggregate && !rec.getAggregateReports().isEmpty()) {
-			store(record(dmarc, source, envelopeFrom, spf, dkim, applied));
+			store(record(dmarc, source, envelopeFrom, spf, dkim, applied, overrideComment, clock.getAsLong()));
 		}
 		if (failure && !rec.getFailureReports().isEmpty() && wantsFailureReport(dmarc, spf, dkim) && !isReport(headers)
 				&& allowFailure(dmarc.getPolicyDomain())) {
@@ -209,9 +221,17 @@ public final class DmarcReporter {
 	/** The aggregate report row for an evaluation. */
 	static ReportRecord record(DmarcResult dmarc, InetAddress source, String envelopeFrom, SpfResult spf, List<DkimResult> dkim,
 			DmarcRecord.Policy applied, long now) {
+		return record(dmarc, source, envelopeFrom, spf, dkim, applied, null, now);
+	}
+
+	static ReportRecord record(DmarcResult dmarc, InetAddress source, String envelopeFrom, SpfResult spf, List<DkimResult> dkim,
+			DmarcRecord.Policy applied, String overrideComment, long now) {
 		String reason = "";
 		String comment = "";
-		if (dmarc.getResult() == DmarcResult.Result.FAIL && dmarc.getDisposition() != dmarc.getPolicy()) {
+		if (applied != dmarc.getDisposition() && overrideComment != null) {
+			reason = "local_policy";
+			comment = overrideComment;
+		} else if (dmarc.getResult() == DmarcResult.Result.FAIL && dmarc.getDisposition() != dmarc.getPolicy()) {
 			reason = "sampled_out";
 		} else if (applied != dmarc.getDisposition()) {
 			reason = "local_policy";
@@ -240,11 +260,6 @@ public final class DmarcReporter {
 		return new ReportRecord(now / 1000, source == null ? "" : source.getHostAddress(), dmarc.getFromDomain(), envelopeFrom,
 				dmarc.getPolicyDomain(), raw, applied.keyword(), dmarc.getDkimDomain() != null ? "pass" : "fail",
 				dmarc.isSpfAligned() ? "pass" : "fail", reason, comment, auth, spfDomain, scope, spfResult);
-	}
-
-	private ReportRecord record(DmarcResult dmarc, InetAddress source, String envelopeFrom, SpfResult spf, List<DkimResult> dkim,
-			DmarcRecord.Policy applied) {
-		return record(dmarc, source, envelopeFrom, spf, dkim, applied, clock.getAsLong());
 	}
 
 	private static List<String> tagList(DmarcRecord r) {

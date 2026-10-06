@@ -30,6 +30,7 @@ import us.bringardner.net.framework.server.Server;
 import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SMTP;
 import us.bringardner.net.smtp.dkim.Dkim;
+import us.bringardner.net.smtp.dkim.Arc;
 import us.bringardner.net.smtp.dmarc.Dmarc;
 import us.bringardner.net.smtp.dmarc.DmarcReporter;
 import us.bringardner.net.smtp.dmarc.PublicSuffixList;
@@ -316,6 +317,14 @@ public class SmtpServer extends Server implements SMTP {
 				logError("Can't read the public suffix list " + tmp + "; using the included copy", e);
 			}
 		}
+		Arc arc = c.getArc();
+		arc.setVerify(Boolean.parseBoolean(System.getProperty(P + "arc.verify", "true")));
+		arc.setSeal(Boolean.parseBoolean(System.getProperty(P + "arc.seal", "true")));
+		arc.setDomain(System.getProperty(P + "arc.domain"));
+		tmp = System.getProperty(P + "arc.trustedSealers");
+		if (tmp != null) {
+			arc.addTrustedSealers(tmp);
+		}
 		c.setWorkers(Integer.getInteger(P + "queue.workers", 4));
 		tmp = System.getProperty(P + "queue.retry");
 		if (tmp != null) {
@@ -505,6 +514,11 @@ public class SmtpServer extends Server implements SMTP {
 	 */
 	public Dkim getDkim() {
 		return getDeliveryConfig().getDkim();
+	}
+
+	/** ARC settings (shared by the servers that share a queue). */
+	public Arc getArc() {
+		return getDeliveryConfig().getArc();
 	}
 
 	/** DMARC settings (shared by the servers that share a queue). */

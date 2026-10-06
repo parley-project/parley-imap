@@ -167,7 +167,7 @@ public class TestDkimSmtp {
 		String m = deliver(a, "app@c.test", "team1@b.test",
 				"From: app@c.test\r\nTo: team1@b.test\r\nSubject: unsigned\r\n\r\nHi\r\n", rootB, "team", "unsigned");
 		assertFalse(m.contains("DKIM-Signature"), m);
-		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=none smtp.mailfrom=c.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=c.test\r\n"), m);
+		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=none smtp.mailfrom=c.test;\r\n\tdkim=none;\r\n\tdmarc=none header.from=c.test;\r\n\tarc=none"), m);
 	}
 
 	@Test
