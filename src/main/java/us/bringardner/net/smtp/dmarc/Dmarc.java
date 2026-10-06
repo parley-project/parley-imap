@@ -16,6 +16,7 @@ public final class Dmarc {
 	private volatile boolean enforce;
 	private volatile DmarcDns dns;
 	private volatile PublicSuffixList publicSuffixList;
+	private final DmarcReporter reporter = new DmarcReporter();
 
 	/** Check DMARC for clients that are not authenticated or trusted (default true). */
 	public boolean isCheck() {
@@ -69,6 +70,11 @@ public final class Dmarc {
 	public PublicSuffixList getPublicSuffixList() {
 		PublicSuffixList l = publicSuffixList;
 		return l != null ? l : PublicSuffixList.getDefault();
+	}
+
+	/** Aggregate and failure reports (off unless enabled). */
+	public DmarcReporter getReporter() {
+		return reporter;
 	}
 
 	public DmarcChecker checker() {

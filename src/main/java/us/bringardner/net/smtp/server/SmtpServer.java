@@ -8,6 +8,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -30,6 +31,7 @@ import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SMTP;
 import us.bringardner.net.smtp.dkim.Dkim;
 import us.bringardner.net.smtp.dmarc.Dmarc;
+import us.bringardner.net.smtp.dmarc.DmarcReporter;
 import us.bringardner.net.smtp.dmarc.PublicSuffixList;
 import us.bringardner.net.smtp.spf.Spf;
 import us.bringardner.net.smtp.queue.BjlDnsMxResolver;
@@ -61,6 +63,8 @@ public class SmtpServer extends Server implements SMTP {
 	public static final String ROOT_PROP = SMTP_NAME + ".root";
 	public static final String FILE_SOURCE_PROP = SMTP_NAME + ".fileSource";
 	public static final String QUEUE_DIRECTORY = ".smtp-queue";
+	/** Where DMARC aggregate report data waits to be sent, under the maildrop root. */
+	public static final String DMARC_REPORT_DIRECTORY = ".dmarc-reports";
 	public static final long DEFAULT_MAX_MESSAGE_SIZE = 50L * 1024 * 1024;
 
 	private static final String P = SMTP_NAME + ".";
@@ -293,6 +297,17 @@ public class SmtpServer extends Server implements SMTP {
 		}
 		dmarc.setCheck(Boolean.parseBoolean(System.getProperty(P + "dmarc.check", "true")));
 		dmarc.setEnforce(Boolean.getBoolean(P + "dmarc.enforce"));
+		DmarcReporter reporter = dmarc.getReporter();
+		reporter.setAggregate(Boolean.getBoolean(P + "dmarc.aggregateReports"));
+		reporter.setFailure(Boolean.getBoolean(P + "dmarc.failureReports"));
+		reporter.setHostname(hostname);
+		reporter.setOrgName(System.getProperty(P + "dmarc.reportOrgName", hostname));
+		reporter.setEmail(System.getProperty(P + "dmarc.reportEmail", "postmaster@" + hostname));
+		tmp = System.getProperty(P + "dmarc.reportIntervalHours");
+		if (tmp != null) {
+			reporter.setIntervalMillis((long) (Double.parseDouble(tmp) * 3_600_000));
+		}
+		reporter.setMaxFailurePerHour(Integer.getInteger(P + "dmarc.maxFailureReportsPerHour", 10));
 		tmp = System.getProperty(P + "dmarc.publicSuffixList");
 		if (tmp != null && !tmp.isBlank()) {
 			try {
@@ -345,6 +360,28 @@ public class SmtpServer extends Server implements SMTP {
 		}
 		getQueue().start();
 		queueStarted = true;
+		startDmarcReports();
+	}
+
+	/** Start the DMARC reporter (reports are kept in .dmarc-reports under the maildrop root). */
+	private void startDmarcReports() {
+		Dmarc dmarc = getDeliveryConfig().getDmarc();
+		DmarcReporter r = dmarc.getReporter();
+		if (!r.isAggregate() && !r.isFailure()) {
+			return;
+		}
+		try {
+			MailQueue q = getQueue();
+			r.start(getMaildropRoot().getChild(DMARC_REPORT_DIRECTORY), (from, to, message) -> {
+				List<MailAddress> rcpts = new ArrayList<>();
+				for (String a : to) {
+					rcpts.add(MailAddress.parse(a, true));
+				}
+				q.enqueue(MailAddress.parse(from, true), rcpts, new java.io.ByteArrayInputStream(message), false);
+			}, dmarc.getDns(), dmarc.getPublicSuffixList());
+		} catch (IOException | RuntimeException e) {
+			logError("Can't start the DMARC reporter", e);
+		}
 	}
 
 	@Override
@@ -352,6 +389,7 @@ public class SmtpServer extends Server implements SMTP {
 		super.stop();
 		synchronized (this) {
 			if (queueStarted) {
+				getDeliveryConfig().getDmarc().getReporter().stop();
 				queue.stop();
 				queueStarted = false;
 			}

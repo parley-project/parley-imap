@@ -406,6 +406,22 @@ For mail from other servers, the server combines the SPF and DKIM results with t
 - **DNS:** lookups use BjlDns, the same way as DKIM keys.
 - **Turning it off:** set `JSmtp.dmarc.check=false`.
 
+#### Reports
+
+Domains ask for reports with `rua=` (aggregate) and `ruf=` (failure) in their DMARC record. Both kinds are off by default.
+
+- **Aggregate reports** (`JSmtp.dmarc.aggregateReports=true`, RFC 7489 section 7.2):
+  - Each evaluation is stored in `.dmarc-reports` under the maildrop root, so it survives restarts.
+  - Every `JSmtp.dmarc.reportIntervalHours` (default 24), each domain gets one XML report.
+  - Identical messages share a row, with a count. The `disposition` is what was actually done; a fail that wasn't enforced is marked `local_policy`, and a pct= downgrade `sampled_out`.
+  - The XML is gzipped and mailed as `<org>!<domain>!<begin>!<end>.xml.gz`, with the subject `Report Domain: <domain> Submitter: <org> Report-ID: <id>`.
+- **Failure reports** (`JSmtp.dmarc.failureReports=true`, section 7.3):
+  - Sent at once in the Abuse Reporting Format (RFC 6591): a `message/feedback-report` part, plus the message's header (never its body).
+  - Sent when the domain's `fo=` options call for one: `0` (default) when nothing passed aligned, `1` when either SPF or DKIM didn't pass aligned, `d` when a DKIM signature failed, `s` when SPF failed.
+  - At most `JSmtp.dmarc.maxFailureReportsPerHour` (default 10) per domain. Never sent about a message that is itself a report.
+- **Report addresses:** only `mailto:` URIs are supported, and their size limits (`!10m`) are honoured. An address outside the policy domain's organization is used only if its domain agrees to take the reports (a `v=DMARC1` TXT record at `<policy domain>._report._dmarc.<report domain>`, section 7.1).
+- **Sending:** reports go out through the queue from `JSmtp.dmarc.reportEmail` (default `postmaster@<hostname>`). They are DKIM-signed if a key fits that domain. `JSmtp.dmarc.reportOrgName` (default the host name) names the reporter.
+
 ### Configuration
 
 | Property | Default | Meaning |
@@ -434,11 +450,14 @@ For mail from other servers, the server combines the SPF and DKIM results with t
 | `JSmtp.dmarc.check` | true | Check DMARC for incoming mail and add the result to Authentication-Results |
 | `JSmtp.dmarc.enforce` | false | Act on the policy: refuse `p=reject` mail (550 5.7.1), deliver `p=quarantine` mail to Junk |
 | `JSmtp.dmarc.publicSuffixList` | the included copy | A newer `public_suffix_list.dat` for organizational domains |
+| `JSmtp.dmarc.aggregateReports`, `JSmtp.dmarc.failureReports` | false, false | Send DMARC aggregate (`rua=`) and failure (`ruf=`) reports |
+| `JSmtp.dmarc.reportEmail`, `JSmtp.dmarc.reportOrgName` | `postmaster@<hostname>`, the host name | The reports' sender address and reporting organization |
+| `JSmtp.dmarc.reportIntervalHours`, `JSmtp.dmarc.maxFailureReportsPerHour` | 24, 10 | How often aggregate reports go out; failure reports per domain per hour |
 | `SmtpServer.KeyStoreName`, `SmtpServer.KeyStorePassword`, `SmtpServer.KeyStoreType` | none | Key store for STARTTLS and port 465 |
 
 ### Not included
 
-- **DMARC reports and spam filtering:** DKIM, SPF and DMARC are checked (see above), but DMARC aggregate and failure reports (`rua=`, `ruf=`) aren't sent, ARC (RFC 8617) isn't supported, and there is no spam filtering.
+- **ARC and spam filtering:** DKIM, SPF and DMARC (with reports) are supported, but ARC (RFC 8617) isn't, so mail forwarded by mailing lists may fail DMARC here. There is no spam filtering, and DMARC reports only go to `mailto:` addresses.
 - **Envelope sender:** authenticated users may use any address as the sender; it isn't checked against the login.
 - **Optional extensions:** REQUIRETLS, MT-PRIORITY and DELIVERBY aren't implemented.
 
@@ -459,6 +478,8 @@ For mail from other servers, the server combines the SPF and DKIM results with t
 `TestSpfSuite` runs the openspf.org RFC 7208 test suite (`src/test/resources/spf/rfc7208-tests.yml`, from pyspf), and all 203 cases pass. `TestSpfSmtp` covers how results are recorded, rejection, the HELO check for bounces, and forged headers. `TestBjlDnsMxResolver` runs SPF checks against a BjlDns server.
 
 `TestDmarc` runs the publicsuffix.org test file against the included Public Suffix List. It also covers record parsing, strict and relaxed alignment, `sp=`, `pct=` sampling, DNS errors and bad From fields. `TestDmarcSmtp` covers an aligned pass through a signing relay, a forged From (recorded, or refused when enforcing), quarantine to Junk, and an aligned SPF pass.
+
+`TestDmarcReports` covers aggregate reports, validated against the RFC 7489 schema (`src/test/resources/dmarc/rfc7489.xsd`, repaired as its header explains). It also covers row counts, restarts, report-address permission and size limits, the ARF failure report, `fo=` options, rate limits, and not reporting on reports. `TestDmarcSmtp` also follows both kinds of report through the queue to a mailbox.
 
 `TestBjlDnsMxResolver` starts a real BjlDns `DnsServer` on a free port on 127.0.0.1, with zone files written to a temp directory (`mx.test` with two MX hosts, `implicit.test` with only an A record, `nullmx.test` with a null MX). It checks `BjlDnsMxResolver` against it, including a host with both A and AAAA records and an IPv6-only host (`v6only.test`), and relays messages between two SMTP servers using the MX hosts it finds: over IPv4, over IPv6 (`::1`), and from an unreachable IPv6 address to the host's IPv4 address. The IPv6 relay test is skipped on machines without an IPv6 loopback.
 

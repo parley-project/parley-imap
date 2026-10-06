@@ -561,15 +561,21 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 			// our own users' mail: sign it with the key of its From domain, if any
 			getQueue().dkimSign(t.id, t.incoming);
 		} else {
-			DmarcResult dmarc = addAuthenticationResults(t);
+			AuthResults auth = addAuthenticationResults(t);
+			DmarcResult dmarc = auth == null ? null : auth.dmarc;
+			DmarcRecord.Policy applied = DmarcRecord.Policy.NONE;
 			if (dmarc != null && dmarc.getResult() == DmarcResult.Result.FAIL && getQueue().getConfig().getDmarc().isEnforce()) {
-				if (dmarc.getDisposition() == DmarcRecord.Policy.REJECT) {
-					abortTransaction();
-					reply(MAILBOX_UNAVAILABLE, "5.7.1", "Rejected by the DMARC policy of " + dmarc.getFromDomain());
-					return;
-				}
-				quarantine = dmarc.getDisposition() == DmarcRecord.Policy.QUARANTINE;
+				applied = dmarc.getDisposition();
 			}
+			if (dmarc != null) {
+				report(t, auth, applied);
+			}
+			if (applied == DmarcRecord.Policy.REJECT) {
+				abortTransaction();
+				reply(MAILBOX_UNAVAILABLE, "5.7.1", "Rejected by the DMARC policy of " + dmarc.getFromDomain());
+				return;
+			}
+			quarantine = applied == DmarcRecord.Policy.QUARANTINE;
 		}
 		QueueEntry e = new QueueEntry(t.id);
 		e.setQuarantine(quarantine);
@@ -621,9 +627,9 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 	 * Authentication-Results and Received-SPF fields that claim to be from
 	 * this server are removed (section 5).
 	 *
-	 * @return the DMARC result (null if DMARC is not checked)
+	 * @return the results (null if nothing is checked)
 	 */
-	private DmarcResult addAuthenticationResults(Transaction t) throws IOException {
+	private AuthResults addAuthenticationResults(Transaction t) throws IOException {
 		DeliveryConfig config = getQueue().getConfig();
 		boolean dkim = config.getDkim().isVerify();
 		boolean dmarcOn = config.getDmarc().isCheck();
@@ -640,9 +646,11 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 			}
 		}
 		DmarcResult dmarc = null;
+		HeaderFields headers = null;
 		if (dmarcOn) {
 			try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
-				dmarc = config.getDmarc().checker().check(HeaderFields.read(i), t.spf, results);
+				headers = HeaderFields.read(i);
+				dmarc = config.getDmarc().checker().check(headers, t.spf, results);
 			} catch (IOException | RuntimeException e) {
 				logError("DMARC check of " + t.id + " failed", e);
 			}
@@ -667,7 +675,33 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		HeaderRewriter.insertAfterFirst(t.incoming, getQueue().incoming(t.id + "a"), fields.toString(),
 				f -> (f.is("Authentication-Results") && host.equalsIgnoreCase(authServId(f.getValue())))
 						|| (f.is("Received-SPF") && t.spf != null && claimsReceiver(f.getValue(), host)));
-		return dmarc;
+		return new AuthResults(dmarc, results, headers, ar.substring("Authentication-Results: ".length()));
+	}
+
+	/** What addAuthenticationResults found. */
+	private static final class AuthResults {
+		final DmarcResult dmarc;
+		final List<DkimResult> dkim;
+		final HeaderFields headers;
+		final String authResults;
+
+		AuthResults(DmarcResult dmarc, List<DkimResult> dkim, HeaderFields headers, String authResults) {
+			this.dmarc = dmarc;
+			this.dkim = dkim;
+			this.headers = headers;
+			this.authResults = authResults;
+		}
+	}
+
+	/** Pass a DMARC evaluation to the reporter (aggregate and failure reports). */
+	private void report(Transaction t, AuthResults auth, DmarcRecord.Policy applied) {
+		try {
+			String from = t.from == null ? null : t.from.getLocalPart() + "@" + t.from.getAsciiDomain();
+			getQueue().getConfig().getDmarc().getReporter().evaluated(auth.dmarc, getClientAddress(), from, t.spf, auth.dkim, applied,
+					auth.headers, auth.authResults);
+		} catch (RuntimeException e) {
+			logError("DMARC report for " + t.id + " failed", e);
+		}
 	}
 
 	/** True if a Received-SPF value names this server as the receiver (a forged one). */

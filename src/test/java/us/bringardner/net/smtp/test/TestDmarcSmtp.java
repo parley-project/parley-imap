@@ -49,7 +49,9 @@ public class TestDmarcSmtp {
 		rootB = f.createTempDirectory("dmarcB");
 		KeyPair key = DkimKeys.generate("rsa");
 		txt.put("k1._domainkey.a.test", DkimKeys.dnsRecord(key.getPublic()));
-		txt.put("_dmarc.a.test", "v=DMARC1; p=reject; rua=mailto:dmarc@a.test");
+		// reports go to tony@b.test, which agrees to take them for a.test
+		txt.put("_dmarc.a.test", "v=DMARC1; p=reject; rua=mailto:tony@b.test; ruf=mailto:tony@b.test");
+		txt.put("a.test._report._dmarc.b.test", "v=DMARC1");
 		txt.put("_dmarc.q.test", "v=DMARC1; p=quarantine");
 		txt.put("_dmarc.spf.test", "v=DMARC1; p=reject");
 
@@ -62,6 +64,10 @@ public class TestDmarcSmtp {
 		b.getDkim().setLookup(TestDkim.keys(txt));
 		b.getDmarc().setDns(TestDkim.keys(txt)::txt);
 		b.getSpf().setDns(new TestSpfSuite.Zone(zone));
+		b.getDmarc().getReporter().setAggregate(true);
+		b.getDmarc().getReporter().setFailure(true);
+		b.getDmarc().getReporter().setOrgName("mx.b.test");
+		b.getDmarc().getReporter().setEmail("postmaster@b.test");
 		b.startAndWait(10000);
 
 		a = server(rootA, "mx.a.test", "a.test");
@@ -185,6 +191,38 @@ public class TestDmarcSmtp {
 		r = send(b, "x@nopolicy.test", "From: a@x.test\r\nFrom: b@y.test\r\nTo: team1@b.test\r\nSubject: dmarc two\r\n\r\nhi\r\n");
 		assertTrue(r.startsWith("250"), r);
 		assertTrue(waitFor("dmarc two").contains("\tdmarc=permerror reason=\"more than one From field\"\r\n"));
+	}
+
+	private static String report(String subjectStart) {
+		try {
+			for (String m : TestSmtpServer.inbox(rootB, "tony")) {
+				if (m.contains("\r\nSubject: " + subjectStart)) {
+					return m;
+				}
+			}
+		} catch (IOException e) {
+			// not yet
+		}
+		return null;
+	}
+
+	@Test
+	public void reportsReachTheirAddress() throws Exception {
+		String r = send(b, "tony@a.test", "From: Tony <tony@a.test>\r\nTo: team1@b.test\r\nSubject: dmarc report me\r\n\r\nhi\r\n");
+		assertTrue(r.startsWith("250"), r);
+		waitFor("dmarc report me");
+		// the failure report, at once, through the queue
+		TestSmtpServer.waitFor(() -> report("DMARC failure report for a.test") != null, 30000, "failure report");
+		String f = report("DMARC failure report for a.test");
+		assertTrue(f.contains("Feedback-Type: auth-failure\r\n"), f);
+		assertTrue(f.contains("Delivery-Result: delivered\r\n"), f);
+		// the aggregate report, when the interval ends (here: flushed now)
+		assertTrue(b.getDmarc().getReporter().flush() >= 1);
+		TestSmtpServer.waitFor(() -> report("Report Domain: a.test Submitter: mx.b.test") != null, 30000, "aggregate report");
+		String xml = TestDmarcReports.xml(report("Report Domain: a.test Submitter: mx.b.test"));
+		TestDmarcReports.validate(xml);
+		assertTrue(xml.contains("<header_from>a.test</header_from>"), xml);
+		assertTrue(xml.contains("<source_ip>127.0.0.1</source_ip>") || xml.contains("<source_ip>0:0:0:0:0:0:0:1</source_ip>"), xml);
 	}
 
 	static int junkCount() {
