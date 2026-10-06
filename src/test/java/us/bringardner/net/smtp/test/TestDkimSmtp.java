@@ -81,6 +81,7 @@ public class TestDkimSmtp {
 		s.addLocalDomain(domain);
 		s.setLoginFailureDelay(0);
 		s.getLogger().setLevel(Level.ERROR);
+		s.getSpf().setDns(new TestSpfSuite.Zone(new java.util.HashMap<>())); // SPF without real DNS: every domain has none
 		return s;
 	}
 
@@ -144,7 +145,7 @@ public class TestDkimSmtp {
 		assertTrue(m.contains("\r\nDKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;"), m);
 		assertTrue(m.contains("d=a.test; s=k1;"), m);
 		int received = m.indexOf("\r\nReceived: from ");
-		int ar = m.indexOf("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=pass header.d=a.test header.i=@a.test header.s=k1"
+		int ar = m.indexOf("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=none smtp.mailfrom=a.test;\r\n\tdkim=pass header.d=a.test header.i=@a.test header.s=k1"
 				+ " header.a=rsa-sha256 header.b=");
 		assertTrue(ar > received && received > 0, "A-R after B's Received: " + m);
 		assertTrue(m.indexOf("\r\nDKIM-Signature:") > ar, m);
@@ -165,7 +166,7 @@ public class TestDkimSmtp {
 		String m = deliver(a, "app@c.test", "team1@b.test",
 				"From: app@c.test\r\nTo: team1@b.test\r\nSubject: unsigned\r\n\r\nHi\r\n", rootB, "team", "unsigned");
 		assertFalse(m.contains("DKIM-Signature"), m);
-		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=none\r\n"), m);
+		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=none smtp.mailfrom=c.test;\r\n\tdkim=none\r\n"), m);
 	}
 
 	@Test
@@ -178,7 +179,7 @@ public class TestDkimSmtp {
 				+ sig + body.replace("10", "10000");
 		// straight to B, as from the internet
 		String m = deliver(b, "tony@a.test", "team1@b.test", data, rootB, "team", "tampered");
-		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tdkim=fail reason=\"body hash did not verify\" header.d=a.test"), m);
+		assertTrue(m.contains("\r\nAuthentication-Results: mx.b.test;\r\n\tspf=none smtp.mailfrom=a.test;\r\n\tdkim=fail reason=\"body hash did not verify\" header.d=a.test"), m);
 		assertEquals(1, count(m, "Authentication-Results: mx.b.test"), "the forged ones are removed: " + m);
 		assertFalse(m.contains("MX.B.TEST"), m);
 		assertTrue(m.contains("\r\nAuthentication-Results: other.example; dkim=pass\r\n"), "others' results are kept: " + m);

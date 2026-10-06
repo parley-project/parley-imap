@@ -119,6 +119,7 @@ public class TestSmtpServer {
 		s.addLocalDomain(domain);
 		s.setLoginFailureDelay(0);
 		s.getLogger().setLevel(Level.ERROR);
+		s.getSpf().setDns(new TestSpfSuite.Zone(new java.util.HashMap<>())); // SPF without real DNS: every domain has none
 		return s;
 	}
 

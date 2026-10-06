@@ -374,6 +374,26 @@ Authentication-Results: mx.example.com;
 - The body is hashed as it streams from the queue file, so large messages are never held in memory.
 - Keys are looked up with the `bjldns` resolver's DNS servers when `JSmtp.resolver=bjldns` (or `bjldns-iterative`). Otherwise the servers in `/etc/resolv.conf` are asked through BjlDns. Turn verification off with `JSmtp.dkim.verify=false`.
 
+### SPF (RFC 7208)
+
+For mail from other servers (clients that are neither authenticated nor in `JSmtp.relayNetworks`), the server checks whether the client's address may send for the MAIL FROM domain. For a null reverse-path (`MAIL FROM:<>`, as in bounces), it checks the HELO name instead. The code is in `us.bringardner.net.smtp.spf`, and every DNS query goes through BjlDns.
+
+- **What's supported:** every mechanism (`all`, `include`, `a`, `mx`, `ptr`, `ip4`, `ip6`, `exists`), the `redirect` and `exp` modifiers, and macros. The processing limits apply: at most 10 DNS-querying terms, 2 void lookups, and 10 MX or PTR names.
+- **Recording the result:** a `Received-SPF` field (RFC 7208 section 9.1) goes after our Received field. The result is also added to Authentication-Results, next to the DKIM results:
+
+  ```
+  Received-SPF: pass (mx.example.com: domain of user@example.org designates 192.0.2.1 as permitted sender)
+  	receiver=mx.example.com; client-ip=192.0.2.1; envelope-from="user@example.org"; helo=mail.example.org; mechanism=ip4:192.0.2.0/24; identity=mailfrom;
+  Authentication-Results: mx.example.com;
+  	spf=pass smtp.mailfrom=example.org;
+  	dkim=pass header.d=example.org ...
+  ```
+- **Results:** `pass`, `fail`, `softfail`, `neutral`, `none`, `temperror` (DNS failed) or `permerror` (a broken record, or too many lookups).
+- **Rejecting:** by default the message is accepted whatever the result, so DMARC or a filter can decide. With `JSmtp.spf.rejectFail=true`, a `fail` is refused at MAIL FROM with `550 5.7.23 SPF validation failed:` followed by the domain's explanation (its `exp=` text).
+- **Forged headers:** Received-SPF and Authentication-Results fields that claim to come from this server are removed.
+- **DNS:** queries use the `bjldns` resolver's DNS servers when `JSmtp.resolver=bjldns` (or `bjldns-iterative`). Otherwise they go to the servers in `/etc/resolv.conf` through BjlDns.
+- **Turning it off:** set `JSmtp.spf.check=false`.
+
 ### Configuration
 
 | Property | Default | Meaning |
@@ -397,11 +417,13 @@ Authentication-Results: mx.example.com;
 | `JSmtp.dkim.keys` | none | DKIM signing keys: `domain:selector:keyfile`, comma-separated |
 | `JSmtp.dkim.headers` | see above | Fields to sign, comma-separated (From is required) |
 | `JSmtp.dkim.verify` | true | Verify DKIM signatures of incoming mail and add Authentication-Results |
+| `JSmtp.spf.check` | true | Check SPF for incoming mail and add Received-SPF and Authentication-Results |
+| `JSmtp.spf.rejectFail` | false | Refuse MAIL FROM when the SPF result is `fail` (550 5.7.23) |
 | `SmtpServer.KeyStoreName`, `SmtpServer.KeyStorePassword`, `SmtpServer.KeyStoreType` | none | Key store for STARTTLS and port 465 |
 
 ### Not included
 
-- **SPF, DMARC and spam filtering:** DKIM is supported (see above), but SPF (RFC 7208) and DMARC (RFC 7489) checks and spam filtering are not.
+- **DMARC and spam filtering:** DKIM and SPF are supported (see above), but DMARC (RFC 7489) checks and spam filtering are not.
 - **Envelope sender:** authenticated users may use any address as the sender; it isn't checked against the login.
 - **Optional extensions:** REQUIRETLS, MT-PRIORITY and DELIVERBY aren't implemented.
 
@@ -418,6 +440,8 @@ Authentication-Results: mx.example.com;
 - a 70 MB message under the 64 MB test heap.
 
 `TestDkim` checks signing and verification against the RFC 8463 example message (RSA and Ed25519) and the RFC 6376 canonicalization examples. `TestDkimSmtp` runs a signing server that relays to a verifying one, and covers forged Authentication-Results, signed bounces, and mail queued from code. `TestBjlDnsMxResolver` looks a DKIM key up from a BjlDns server.
+
+`TestSpfSuite` runs the openspf.org RFC 7208 test suite (`src/test/resources/spf/rfc7208-tests.yml`, from pyspf), and all 203 cases pass. `TestSpfSmtp` covers how results are recorded, rejection, the HELO check for bounces, and forged headers. `TestBjlDnsMxResolver` runs SPF checks against a BjlDns server.
 
 `TestBjlDnsMxResolver` starts a real BjlDns `DnsServer` on a free port on 127.0.0.1, with zone files written to a temp directory (`mx.test` with two MX hosts, `implicit.test` with only an A record, `nullmx.test` with a null MX). It checks `BjlDnsMxResolver` against it, including a host with both A and AAAA records and an IPv6-only host (`v6only.test`), and relays messages between two SMTP servers using the MX hosts it finds: over IPv4, over IPv6 (`::1`), and from an unreachable IPv6 address to the host's IPv4 address. The IPv6 relay test is skipped on machines without an IPv6 loopback.
 

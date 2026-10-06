@@ -11,11 +11,13 @@ import java.util.Set;
 import us.bringardner.io.filesource.FileSource;
 import us.bringardner.net.framework.server.IAccessControlList;
 import us.bringardner.net.smtp.dkim.Dkim;
+import us.bringardner.net.smtp.spf.Spf;
 
 /** How the queue delivers mail: local domains and users, routing, retries. */
 public class DeliveryConfig {
 
 	private final Dkim dkim = new Dkim();
+	private final Spf spf = new Spf();
 
 	/** TLS for outgoing connections. */
 	public enum TlsMode {
@@ -281,5 +283,10 @@ public class DeliveryConfig {
 	/** DKIM signing keys and verification settings (RFC 6376). */
 	public Dkim getDkim() {
 		return dkim;
+	}
+
+	/** SPF checking settings (RFC 7208). */
+	public Spf getSpf() {
+		return spf;
 	}
 }

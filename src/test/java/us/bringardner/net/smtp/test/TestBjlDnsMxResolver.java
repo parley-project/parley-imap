@@ -54,6 +54,7 @@ public class TestBjlDnsMxResolver {
 			"mail2   IN A   127.0.0.2",
 			"mail2   IN AAAA ::1",
 			"txtonly IN TXT \"no mail here\"",
+			"@       IN TXT \"v=spf1 mx -all\"",
 			// a DKIM key longer than one 255-byte string (the RFC 8463 example RSA key)
 			"test._domainkey IN TXT \"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDkHlOQoBTzWRiGs5V6NpP3idY6Wk08a5qhdR6wy5bdOKb2jLQiY/J16JYi0Qvx/b\" \"yYzCNb3W91y3FutACDfzwQ/BC/e/8uBsCR+yz1Lxj+PL6lHvqMKrM3rG4hstT5QjvHO9PzoxZyVYLzBfO2EeC3Ip3G+2kryOTIKT+l/K4w3QIDAQAB\"",
 			"");
@@ -204,6 +205,22 @@ public class TestBjlDnsMxResolver {
 		assertEquals("4.4.3", e.getStatus());
 	}
 
+	/** SPF checks make their queries (TXT, MX, A) with BjlDns too. */
+	@Test
+	public void testSpfThroughBjlDns() throws Exception {
+		us.bringardner.net.smtp.spf.SpfChecker spf = new us.bringardner.net.smtp.spf.SpfChecker(resolver()::records, "mx.test");
+		us.bringardner.net.smtp.spf.SpfResult r = spf.checkMailFrom(InetAddress.getByName("127.0.0.2"), "joe@mx.test", "mail2.mx.test");
+		assertEquals(us.bringardner.net.smtp.spf.SpfResult.Result.PASS, r.getResult(), r.toString());
+		r = spf.checkMailFrom(InetAddress.getByName("::1"), "joe@mx.test", "mail2.mx.test");
+		assertEquals(us.bringardner.net.smtp.spf.SpfResult.Result.PASS, r.getResult(), "mail2's AAAA: " + r);
+		r = spf.checkMailFrom(InetAddress.getByName("127.0.0.9"), "joe@mx.test", "x.example");
+		assertEquals(us.bringardner.net.smtp.spf.SpfResult.Result.FAIL, r.getResult(), r.toString());
+		r = spf.checkMailFrom(InetAddress.getByName("127.0.0.9"), "joe@implicit.test", "x.example");
+		assertEquals(us.bringardner.net.smtp.spf.SpfResult.Result.NONE, r.getResult(), r.toString());
+		r = spf.checkMailFrom(InetAddress.getByName("127.0.0.9"), "joe@elsewhere.test", "x.example");
+		assertEquals(us.bringardner.net.smtp.spf.SpfResult.Result.TEMPERROR, r.getResult(), "SERVFAIL: " + r);
+	}
+
 	/** DKIM keys come from BjlDns too: TXT lookups through the same servers. */
 	@Test
 	public void testDkimKeyLookup() throws Exception {
@@ -273,6 +290,7 @@ public class TestBjlDnsMxResolver {
 			b.getDeliveryConfig().getLocalDomains().clear();
 			b.addLocalDomain(domain);
 			b.getLogger().setLevel(us.bringardner.core.ILogger.Level.ERROR);
+			b.getSpf().setDns(resolver()::records); // SPF from the test DNS server, not the real one
 			b.startAndWait(10000);
 
 			a.setMaildropRoot(rootA);

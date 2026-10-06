@@ -8,6 +8,7 @@ import us.bringardner.net.smtp.MailPath;
 import us.bringardner.net.smtp.queue.QueueEntry;
 import us.bringardner.net.smtp.server.SmtpRequestProcessor;
 import us.bringardner.net.smtp.server.SmtpServer;
+import us.bringardner.net.smtp.spf.SpfResult;
 
 /**
  * MAIL FROM:&lt;reverse-path&gt; [parameters] (RFC 5321 section 4.1.1.2), with
@@ -123,8 +124,25 @@ public class Mail extends BaseCommand {
 				return;
 			}
 		}
+		t.spf = p.checkSpf(t.from);
+		if (t.spf != null && t.spf.getResult() == SpfResult.Result.FAIL && p.getQueue().getConfig().getSpf().isRejectFail()) {
+			// RFC 7208 section 8.4, RFC 7372
+			p.error(MAILBOX_UNAVAILABLE, "5.7.23", "SPF validation failed: " + explanation(t.spf.getExplanation()));
+			return;
+		}
 		p.setTransaction(t);
 		p.reply(OK, "2.1.0", "Ok");
+	}
+
+	/** The domain's explanation, made safe for a reply line (printable ASCII, at most 200 characters). */
+	static String explanation(String text) {
+		StringBuilder sb = new StringBuilder();
+		String t = text == null ? "" : text;
+		for (int i = 0; i < t.length() && sb.length() < 200; i++) {
+			char c = t.charAt(i);
+			sb.append(c < 32 || c > 126 ? '?' : c);
+		}
+		return sb.toString();
 	}
 
 	static boolean isAscii(String s) {

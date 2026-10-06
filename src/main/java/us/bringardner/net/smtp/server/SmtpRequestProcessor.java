@@ -35,6 +35,8 @@ import us.bringardner.net.smtp.queue.HeaderRewriter;
 import us.bringardner.net.smtp.queue.MailQueue;
 import us.bringardner.net.smtp.queue.QueueEntry;
 import us.bringardner.net.smtp.queue.QueuedRecipient;
+import us.bringardner.net.smtp.spf.Spf;
+import us.bringardner.net.smtp.spf.SpfResult;
 import us.bringardner.io.IoUtils;
 
 /**
@@ -73,6 +75,8 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		public String ret;
 		public String envid;
 		public final List<QueuedRecipient> recipients = new ArrayList<>();
+		/** The SPF result of MAIL FROM (null if not checked). */
+		public SpfResult spf;
 		/** BDAT in progress. */
 		String id;
 		FileSource incoming;
@@ -552,8 +556,8 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 		if (mayRelay()) {
 			// our own users' mail: sign it with the key of its From domain, if any
 			getQueue().dkimSign(t.id, t.incoming);
-		} else if (getQueue().getConfig().getDkim().isVerify()) {
-			verifyDkim(t);
+		} else {
+			addAuthenticationResults(t);
 		}
 		QueueEntry e = new QueueEntry(t.id);
 		e.setFrom(t.from);
@@ -579,27 +583,68 @@ public class SmtpRequestProcessor extends AbstractCommandProcessor implements SM
 	}
 
 	/**
-	 * Verify the message's DKIM signatures and record the results in an
-	 * Authentication-Results field after our Received field (RFC 8601).
-	 * Authentication-Results fields that claim to be from this server are
-	 * removed (section 5). The message is accepted whatever the result.
+	 * SPF (RFC 7208) for MAIL FROM, or for the HELO name when the
+	 * reverse-path is null. Null if SPF checking is off or the client is
+	 * authenticated or trusted.
 	 */
-	private void verifyDkim(Transaction t) throws IOException {
-		String host = getSmtpServer().getHostname();
-		List<DkimResult> results;
-		try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
-			results = getQueue().getConfig().getDkim().verify(i);
-		} catch (IOException | RuntimeException e) {
-			logError("DKIM verification of " + t.id + " failed", e);
+	public SpfResult checkSpf(MailAddress from) {
+		Spf spf = getQueue().getConfig().getSpf();
+		if (!spf.isCheck() || mayRelay()) {
+			return null;
+		}
+		try {
+			String sender = from == null ? null : from.getLocalPart() + "@" + from.getAsciiDomain();
+			return spf.checker(getSmtpServer().getHostname()).checkMailFrom(getClientAddress(), sender, helo);
+		} catch (RuntimeException e) {
+			logError("SPF check failed", e);
+			return null;
+		}
+	}
+
+	/**
+	 * Record the SPF result (Received-SPF, RFC 7208 section 9.1) and verify the
+	 * message's DKIM signatures, and put both results in an
+	 * Authentication-Results field (RFC 8601) after our Received field.
+	 * Authentication-Results fields that claim to be from this server are
+	 * removed (section 5). The message is accepted whatever the results.
+	 */
+	private void addAuthenticationResults(Transaction t) throws IOException {
+		boolean dkim = getQueue().getConfig().getDkim().isVerify();
+		if (t.spf == null && !dkim) {
 			return;
 		}
+		String host = getSmtpServer().getHostname();
+		List<DkimResult> results = new ArrayList<>();
+		if (dkim) {
+			try (InputStream i = new BufferedInputStream(t.incoming.getInputStream(), 64 * 1024)) {
+				results = getQueue().getConfig().getDkim().verify(i);
+			} catch (IOException | RuntimeException e) {
+				logError("DKIM verification of " + t.id + " failed", e);
+			}
+		}
+		StringBuilder fields = new StringBuilder();
+		if (t.spf != null) {
+			fields.append("Received-SPF: ").append(t.spf.toReceivedSpf(host)).append("\r\n");
+		}
 		StringBuilder ar = new StringBuilder("Authentication-Results: ").append(host);
+		if (t.spf != null) {
+			ar.append(";\r\n\t").append(t.spf.toAuthResults());
+		}
 		for (DkimResult r : results) {
 			ar.append(";\r\n\t").append(r.toAuthResults());
 		}
-		ar.append("\r\n");
-		HeaderRewriter.insertAfterFirst(t.incoming, getQueue().incoming(t.id + "a"), ar.toString(),
-				f -> f.is("Authentication-Results") && host.equalsIgnoreCase(authServId(f.getValue())));
+		fields.append(ar).append("\r\n");
+		HeaderRewriter.insertAfterFirst(t.incoming, getQueue().incoming(t.id + "a"), fields.toString(),
+				f -> (f.is("Authentication-Results") && host.equalsIgnoreCase(authServId(f.getValue())))
+						|| (f.is("Received-SPF") && t.spf != null && claimsReceiver(f.getValue(), host)));
+	}
+
+	/** True if a Received-SPF value names this server as the receiver (a forged one). */
+	static boolean claimsReceiver(String value, String host) {
+		String v = value.toLowerCase(java.util.Locale.ROOT);
+		String h = host.toLowerCase(java.util.Locale.ROOT);
+		return v.contains("receiver=" + h + ";") || v.contains("receiver=" + h + " ") || v.endsWith("receiver=" + h)
+				|| v.contains("(" + h + ":");
 	}
 
 	/** The authserv-id of an Authentication-Results value: the text before the first ';' (version and comments removed). */

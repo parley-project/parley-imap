@@ -313,6 +313,23 @@ public class BjlDnsMxResolver implements MxResolver {
 	}
 
 	/**
+	 * The records of one type for a name (for SPF and the like). A timeout or
+	 * server failure is {@link LookupResult.Status#TEMPFAIL}.
+	 */
+	public LookupResult<RR> records(String name, int type) {
+		if (mode == Mode.ITERATIVE) {
+			return Lookup.records(name, type);
+		}
+		Message m;
+		try {
+			m = query(name, type);
+		} catch (DeliveryException e) {
+			m = null;
+		}
+		return Lookup.fromResponse(name, type, m, rr -> rr);
+	}
+
+	/**
 	 * The TXT records of a name (for DKIM keys and the like), each record's
 	 * strings joined. A timeout or server failure is
 	 * {@link LookupResult.Status#TEMPFAIL}.

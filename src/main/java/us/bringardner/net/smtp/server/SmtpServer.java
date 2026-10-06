@@ -29,6 +29,7 @@ import us.bringardner.net.framework.server.Server;
 import us.bringardner.net.smtp.MailAddress;
 import us.bringardner.net.smtp.SMTP;
 import us.bringardner.net.smtp.dkim.Dkim;
+import us.bringardner.net.smtp.spf.Spf;
 import us.bringardner.net.smtp.queue.BjlDnsMxResolver;
 import us.bringardner.net.smtp.queue.DeliveryConfig;
 import us.bringardner.net.smtp.queue.MailQueue;
@@ -278,6 +279,12 @@ public class SmtpServer extends Server implements SMTP {
 				logError("Can't load the DKIM keys (" + P + "dkim.keys); mail is sent unsigned", e);
 			}
 		}
+		Spf spf = c.getSpf();
+		if (c.getResolver() instanceof BjlDnsMxResolver) {
+			spf.setDns(((BjlDnsMxResolver) c.getResolver())::records);
+		}
+		spf.setCheck(Boolean.parseBoolean(System.getProperty(P + "spf.check", "true")));
+		spf.setRejectFail(Boolean.getBoolean(P + "spf.rejectFail"));
 		c.setWorkers(Integer.getInteger(P + "queue.workers", 4));
 		tmp = System.getProperty(P + "queue.retry");
 		if (tmp != null) {
@@ -444,6 +451,11 @@ public class SmtpServer extends Server implements SMTP {
 	 */
 	public Dkim getDkim() {
 		return getDeliveryConfig().getDkim();
+	}
+
+	/** SPF settings (shared by the servers that share a queue). */
+	public Spf getSpf() {
+		return getDeliveryConfig().getSpf();
 	}
 
 	/** Add a domain whose mail is delivered locally. */
