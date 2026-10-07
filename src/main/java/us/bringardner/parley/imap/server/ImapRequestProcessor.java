@@ -50,7 +50,6 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 		OK, FAILED, NOT_AUTHORIZED, TLS_REQUIRED, ERROR
 	}
 
-	private static final int MAX_LOGIN_ATTEMPTS = 3;
 	/** Socket timeout: how often a waiting session checks for autologout and stop. */
 	private static final int POLL_INTERVAL = 1000;
 
@@ -499,7 +498,7 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 		default:
 			loginFailedDelay();
 			no(req, CODE_AUTHENTICATIONFAILED, "Invalid user name or password");
-			if (++loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+			if (getImapServer().isTooManyLoginFailures(++loginAttempts)) {
 				untagged(BYE + " Too many failed logins");
 				flush();
 				state = State.LOGOUT;

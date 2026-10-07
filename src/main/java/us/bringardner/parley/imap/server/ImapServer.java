@@ -57,6 +57,7 @@ public class ImapServer extends Server implements IMAP {
 	public static final int DEFAULT_AUTOLOGOUT = 30 * 60 * 1000;
 	public static final String AUTOLOGOUT_PROP = IMAP_NAME + ".autologout";
 	public static final int DEFAULT_LOGIN_FAILURE_DELAY = 1000;
+	/** Older name of the delay setting, still read: see {@link #getDefaultLoginFailureDelay()} */
 	public static final String LOGIN_FAILURE_DELAY_PROP = IMAP_NAME + ".loginFailureDelay";
 	/** Refuse LOGIN and AUTHENTICATE until STARTTLS (LOGINDISABLED). */
 	public static final String REQUIRE_TLS_PROP = IMAP_NAME + ".requireTls";
@@ -67,7 +68,6 @@ public class ImapServer extends Server implements IMAP {
 	public static final String DEFAULT_MAILBOXES_PROP = IMAP_NAME + ".defaultMailboxes";
 
 	private volatile int autologout = Integer.getInteger(AUTOLOGOUT_PROP, DEFAULT_AUTOLOGOUT);
-	private volatile int loginFailureDelay = Integer.getInteger(LOGIN_FAILURE_DELAY_PROP, DEFAULT_LOGIN_FAILURE_DELAY);
 	private volatile boolean requireTls = Boolean.getBoolean(REQUIRE_TLS_PROP);
 	private volatile long appendLimit = Long.getLong(APPEND_LIMIT_PROP, DEFAULT_APPEND_LIMIT);
 	private volatile boolean createDefaultMailboxes = Boolean
@@ -325,12 +325,13 @@ public class ImapServer extends Server implements IMAP {
 		this.autologout = autologout;
 	}
 
-	public int getLoginFailureDelay() {
-		return loginFailureDelay;
-	}
-
-	public void setLoginFailureDelay(int loginFailureDelay) {
-		this.loginFailureDelay = Math.max(0, loginFailureDelay);
+	/**
+	 * The shared LoginFailureDelay setting (see AbstractCoreServer) defaults to the older
+	 * {@value #LOGIN_FAILURE_DELAY_PROP} system property, else {@value #DEFAULT_LOGIN_FAILURE_DELAY} ms.
+	 */
+	@Override
+	protected int getDefaultLoginFailureDelay() {
+		return Integer.getInteger(LOGIN_FAILURE_DELAY_PROP, DEFAULT_LOGIN_FAILURE_DELAY);
 	}
 
 	public boolean isRequireTls() {

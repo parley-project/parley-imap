@@ -866,4 +866,18 @@ public class TestImapServer {
 			assertEquals("* SEARCH 1", c.ok("SEARCH BODY \"see attached\"").get(0));
 		}
 	}
+
+	/** The shared MaxLoginAttempts setting */
+	@Test
+	public void testMaxLoginAttempts() throws Exception {
+		server.setMaxLoginAttempts(2);
+		try (ImapClient c = connect()) {
+			assertTrue(tagged(c.cmd("LOGIN tony wrong")).contains("NO [AUTHENTICATIONFAILED]"));
+			assertTrue(tagged(c.cmd("LOGIN tony wrong2")).contains("NO [AUTHENTICATIONFAILED]"));
+			assertEquals("* BYE Too many failed logins", c.readLine());
+			assertNull(c.readLine(), "closed after 2 failures");
+		} finally {
+			server.setMaxLoginAttempts(3);
+		}
+	}
 }
