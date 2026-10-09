@@ -145,13 +145,29 @@ public class List extends BaseCommand {
 		return Pattern.compile(sb.toString(), Pattern.DOTALL);
 	}
 
+	/** Case-insensitive variants of the client's patterns, so LIST doesn't compile one per call. */
+	private static final Map<String, Pattern> CASE_INSENSITIVE = new LinkedHashMap<String, Pattern>(64, 0.75f, true) {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, Pattern> eldest) {
+			return size() > 64;
+		}
+	};
+
+	private static Pattern caseInsensitive(Pattern p) {
+		synchronized (CASE_INSENSITIVE) {
+			return CASE_INSENSITIVE.computeIfAbsent(p.pattern(),
+					rx -> Pattern.compile(rx, Pattern.CASE_INSENSITIVE | Pattern.DOTALL));
+		}
+	}
+
 	static boolean matches(java.util.List<Pattern> regexes, String name) {
 		for (Pattern p : regexes) {
 			if (p.matcher(name).matches()) {
 				return true;
 			}
-			if (name.equals(INBOX) && Pattern.compile(p.pattern(), Pattern.CASE_INSENSITIVE | Pattern.DOTALL)
-					.matcher(name).matches()) {
+			if (name.equals(INBOX) && caseInsensitive(p).matcher(name).matches()) {
 				return true;
 			}
 		}
