@@ -1,5 +1,6 @@
 package us.bringardner.parley.imap.server;
 
+import us.bringardner.parley.core.util.Hex;
 import us.bringardner.parley.io.IoUtils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -354,7 +355,8 @@ public final class MessageStructure {
 			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || "!#$&+-.^_`|~".indexOf(c) >= 0) {
 				sb.append((char) c);
 			} else {
-				sb.append('%').append(String.format("%02X", c));
+				sb.append('%');
+				Hex.appendUpper(sb, c);
 			}
 		}
 		return sb.toString();
