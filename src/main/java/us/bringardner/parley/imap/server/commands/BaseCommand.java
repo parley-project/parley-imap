@@ -2,9 +2,9 @@ package us.bringardner.parley.imap.server.commands;
 
 import java.io.IOException;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.Set;
 
+import us.bringardner.parley.net.server.AbstractCommand;
 import us.bringardner.parley.net.server.ICommandProcessor;
 import us.bringardner.parley.net.server.IPermission;
 import us.bringardner.parley.net.server.IRequestContext;
@@ -18,7 +18,7 @@ import us.bringardner.parley.mail.store.MailStore;
  * Base for IMAP commands: by default valid in the authenticated and selected
  * states, needing the READ permission.
  */
-public abstract class BaseCommand implements ImapCommand, IMAP {
+public abstract class BaseCommand extends AbstractCommand implements ImapCommand, IMAP {
 
 	private static final long serialVersionUID = 1L;
 
@@ -27,36 +27,15 @@ public abstract class BaseCommand implements ImapCommand, IMAP {
 	protected static final Set<State> AUTHENTICATED = EnumSet.of(State.AUTHENTICATED, State.SELECTED);
 	protected static final Set<State> SELECTED = EnumSet.of(State.SELECTED);
 
-	private String name;
-	private String help;
 	private final Set<State> states;
 
 	protected BaseCommand(String command, Set<State> states) {
-		this.name = command.toUpperCase(Locale.ROOT);
-		this.help = "No help available for " + name;
+		super(command);
 		this.states = states;
 	}
 
 	protected BaseCommand(String command) {
 		this(command, AUTHENTICATED);
-	}
-
-	@Override
-	public String getName() {
-		return name;
-	}
-
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	@Override
-	public String getHelp() {
-		return help;
-	}
-
-	public void setHelp(String help) {
-		this.help = help;
 	}
 
 	@Override

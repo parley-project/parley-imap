@@ -1,6 +1,6 @@
 package us.bringardner.parley.imap.server;
 
-import java.io.BufferedInputStream;
+import us.bringardner.parley.io.IoUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -140,7 +140,7 @@ public final class MessageStructure {
 	public static InputStream openDecoded(Message m) throws IOException {
 		long[] r = bodyRange(m);
 		String cte = m.getTransferEncoding();
-		InputStream raw = new BufferedInputStream(m.openSource(r[0], r[1]), 64 * 1024);
+		InputStream raw = IoUtils.buffered(m.openSource(r[0], r[1]));
 		switch (cte) {
 		case "7bit":
 		case "8bit":

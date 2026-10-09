@@ -1,7 +1,6 @@
 package us.bringardner.parley.imap.client;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import us.bringardner.parley.mail.Sasl;
 import java.io.ByteArrayOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -287,7 +286,7 @@ public class ImapClient implements AutoCloseable {
 		input = new ImapInput(s.getInputStream());
 		input.setKeepWaiting(() -> !idleMode && state != State.DISCONNECTED
 				&& System.currentTimeMillis() - Math.max(input.getLastReceived(), waitStart) < config.getReadTimeout());
-		output = new BufferedOutputStream(s.getOutputStream(), 64 * 1024);
+		output = IoUtils.buffered(s.getOutputStream());
 		reader = new ResponseReader(input);
 		reader.setMaxMemoryLiteral(config.getMaxMemoryLiteral());
 	}
@@ -309,8 +308,7 @@ public class ImapClient implements AutoCloseable {
 			requireState(State.NOT_AUTHENTICATED);
 			Result r;
 			if (hasCapability("AUTH=PLAIN") && hasCapability("SASL-IR")) {
-				String ir = Base64.getEncoder()
-						.encodeToString(("\0" + user + "\0" + password).getBytes(StandardCharsets.UTF_8));
+				String ir = Sasl.encodePlain(user, password);
 				Command c = new Command("AUTHENTICATE", false).raw("PLAIN");
 				c.parts.add(ir);
 				r = run(c);
@@ -651,10 +649,10 @@ public class ImapClient implements AutoCloseable {
 	public Message fetchMessage(long uid) throws IOException {
 		FileSource tmp = FileSourceFactory.getDefaultFactory().createTempFile("imapfetch", ".eml");
 		try {
-			try (OutputStream out = new BufferedOutputStream(tmp.getOutputStream(), 64 * 1024)) {
+			try (OutputStream out = IoUtils.buffered(tmp.getOutputStream())) {
 				fetchMessage(uid, out, false, null);
 			}
-			try (InputStream in = new BufferedInputStream(tmp.getInputStream(), 64 * 1024)) {
+			try (InputStream in = IoUtils.buffered(tmp.getInputStream())) {
 				return Message.read(in);
 			}
 		} finally {
@@ -692,11 +690,11 @@ public class ImapClient implements AutoCloseable {
 		// decode here: fetch the encoded part into a temp file first
 		FileSource tmp = FileSourceFactory.getDefaultFactory().createTempFile("imappart", ".tmp");
 		try {
-			try (OutputStream o = new BufferedOutputStream(tmp.getOutputStream(), 64 * 1024)) {
+			try (OutputStream o = IoUtils.buffered(tmp.getOutputStream())) {
 				fetchSection(uid, "BODY.PEEK[" + n + "]", o, progress);
 			}
 			long count = 0;
-			try (InputStream raw = new BufferedInputStream(tmp.getInputStream(), 64 * 1024);
+			try (InputStream raw = IoUtils.buffered(tmp.getInputStream());
 					InputStream in = enc.equals("BASE64") ? Base64.getMimeDecoder().wrap(raw) : QuotedPrintable.decoder(raw)) {
 				byte[] buf = new byte[64 * 1024];
 				int r;
@@ -984,10 +982,10 @@ public class ImapClient implements AutoCloseable {
 	public long append(String mailbox, Message message, Collection<String> flags) throws IOException {
 		FileSource tmp = FileSourceFactory.getDefaultFactory().createTempFile("imapappend", ".eml");
 		try {
-			try (OutputStream out = new BufferedOutputStream(tmp.getOutputStream(), 64 * 1024)) {
+			try (OutputStream out = IoUtils.buffered(tmp.getOutputStream())) {
 				message.writeTo(out);
 			}
-			try (InputStream in = new BufferedInputStream(tmp.getInputStream(), 64 * 1024)) {
+			try (InputStream in = IoUtils.buffered(tmp.getInputStream())) {
 				return append(mailbox, in, tmp.length(), flags, null, null);
 			}
 		} finally {

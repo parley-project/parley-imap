@@ -1,6 +1,6 @@
 package us.bringardner.parley.imap.server;
 
-import java.io.BufferedOutputStream;
+import us.bringardner.parley.io.IoUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -129,7 +129,7 @@ public final class ImapCommandReader {
 				} else {
 					FileSource f = temp.create();
 					temps.add(f);
-					try (OutputStream o = new BufferedOutputStream(f.getOutputStream(), 64 * 1024)) {
+					try (OutputStream o = IoUtils.buffered(f.getOutputStream())) {
 						in.readFully(size, o);
 					}
 					lit = new ImapToken.Literal(f, size, binary);

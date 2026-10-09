@@ -1,8 +1,7 @@
 package us.bringardner.parley.imap.server.commands;
 
+import us.bringardner.parley.mail.Sasl;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Locale;
 
 import us.bringardner.parley.imap.server.ImapRequest;
@@ -48,17 +47,16 @@ public class Authenticate extends NoAuthReqBaseCommand {
 		}
 		byte[] decoded;
 		try {
-			decoded = response.equals("=") ? new byte[0] : Base64.getDecoder().decode(response);
+			decoded = Sasl.decodeResponse(response);
 		} catch (IllegalArgumentException e) {
 			p.bad(r, "Invalid base64");
 			return;
 		}
-		// authzid NUL authcid NUL passwd
-		String[] parts = new String(decoded, StandardCharsets.UTF_8).split("\u0000", -1);
-		if (parts.length != 3 || parts[1].isEmpty() || (!parts[0].isEmpty() && !parts[0].equals(parts[1]))) {
+		String[] credentials = Sasl.parsePlain(decoded);
+		if (credentials == null) {
 			p.replyLoginResult(r, ImapRequestProcessor.LoginResult.FAILED);
 			return;
 		}
-		p.replyLoginResult(r, p.login(parts[1], parts[2]));
+		p.replyLoginResult(r, p.login(credentials[0], credentials[1]));
 	}
 }

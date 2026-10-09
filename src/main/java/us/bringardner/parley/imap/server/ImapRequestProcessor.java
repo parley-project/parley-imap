@@ -1,5 +1,6 @@
 package us.bringardner.parley.imap.server;
 
+import us.bringardner.parley.io.LineTooLongException;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -15,9 +16,8 @@ import java.util.Map;
 
 import us.bringardner.parley.core.ILogger;
 import us.bringardner.parley.files.FileSource;
-import us.bringardner.parley.mail.SaslPrep;
 import us.bringardner.parley.net.IConnection;
-import us.bringardner.parley.net.server.AbstractCommandProcessor;
+import us.bringardner.parley.mail.server.AbstractMailProcessor;
 import us.bringardner.parley.net.server.ICommand;
 import us.bringardner.parley.net.server.IPrincipal;
 import us.bringardner.parley.imap.IMAP;
@@ -39,7 +39,7 @@ import us.bringardner.parley.io.IoUtils;
  * with UTF-8 headers are sent as their RFC 6858 surrogates and mailbox names in
  * modified UTF-7.
  */
-public class ImapRequestProcessor extends AbstractCommandProcessor implements IMAP {
+public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP {
 
 	private static final long serialVersionUID = 1L;
 
@@ -72,7 +72,6 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 	private transient MailboxView view;
 	private String selectedName;
 	private List<Long> savedSearch;
-	private int loginAttempts;
 	private volatile boolean idling;
 
 	public ImapRequestProcessor() {
@@ -124,7 +123,7 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 					flush();
 				}
 				return;
-			} catch (ImapInput.LineTooLongException e) {
+			} catch (LineTooLongException e) {
 				untagged(BAD + " Command line too long");
 				flush();
 				continue;
@@ -409,19 +408,14 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 		return rev2 || utf8Accept;
 	}
 
-	public boolean isTls() {
-		IConnection con = getConnection();
-		return con != null && con.isSecure();
-	}
-
-	public boolean isLoginBlockedUntilTls() {
-		return getImapServer().isRequireTls() && !isTls();
-	}
-
 	/** STARTTLS: the response has been sent; negotiate TLS and forget anything buffered. */
-	public void startTls() throws IOException {
+	@Override
+	protected void beforeTls() throws IOException {
 		out.flush();
-		getConnection().negotiateSecureSocket("TLS");
+	}
+
+	@Override
+	protected void afterTls() throws IOException {
 		openStreams();
 	}
 
@@ -456,12 +450,7 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 		if (isLoginBlockedUntilTls()) {
 			return LoginResult.TLS_REQUIRED;
 		}
-		user = SaslPrep.prepare(user, false);
-		password = SaslPrep.prepare(password, false);
-		if (user == null || password == null || user.isEmpty()) {
-			return LoginResult.FAILED;
-		}
-		IPrincipal p = getServer().authenticate(user, password.getBytes(StandardCharsets.UTF_8));
+		IPrincipal p = authenticate(user, password);
 		if (p == null) {
 			return LoginResult.FAILED;
 		}
@@ -498,21 +487,10 @@ public class ImapRequestProcessor extends AbstractCommandProcessor implements IM
 		default:
 			loginFailedDelay();
 			no(req, CODE_AUTHENTICATIONFAILED, "Invalid user name or password");
-			if (getImapServer().isTooManyLoginFailures(++loginAttempts)) {
+			if (tooManyLoginFailures()) {
 				untagged(BYE + " Too many failed logins");
 				flush();
 				state = State.LOGOUT;
-			}
-		}
-	}
-
-	private void loginFailedDelay() {
-		int delay = getImapServer().getLoginFailureDelay();
-		if (delay > 0) {
-			try {
-				Thread.sleep(delay);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
 			}
 		}
 	}

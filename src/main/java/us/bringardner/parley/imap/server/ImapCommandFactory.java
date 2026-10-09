@@ -1,13 +1,9 @@
 package us.bringardner.parley.imap.server;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
+import us.bringardner.parley.net.server.AbstractCommandFactory;
 import us.bringardner.parley.net.server.ICommand;
-import us.bringardner.parley.net.server.ICommandFactory;
-import us.bringardner.parley.net.server.IRequestContext;
 import us.bringardner.parley.imap.server.commands.Append;
 import us.bringardner.parley.imap.server.commands.Authenticate;
 import us.bringardner.parley.imap.server.commands.Capability;
@@ -42,11 +38,11 @@ import us.bringardner.parley.imap.server.commands.Unsubscribe;
  * Maps IMAP command names to their command classes (as FtpCommandFactory does
  * for FTP). Commands can be replaced or added with {@link #addCommand(ICommand)}.
  */
-public class ImapCommandFactory implements ICommandFactory {
+public class ImapCommandFactory extends AbstractCommandFactory {
 
 	private static final long serialVersionUID = 1L;
 
-	private static final Map<String, ICommand> commands = Collections.synchronizedMap(new HashMap<>());
+	private static final Map<String, ICommand> commands = newRegistry();
 
 	static {
 		// any state (RFC 9051 section 6.1)
@@ -85,17 +81,11 @@ public class ImapCommandFactory implements ICommandFactory {
 		addCommand(new Uid());
 	}
 
+	public ImapCommandFactory() {
+		super(commands);
+	}
+
 	public static void addCommand(ICommand cmd) {
-		commands.put(cmd.getName().toUpperCase(Locale.ROOT), cmd);
-	}
-
-	@Override
-	public ICommand getCommand(IRequestContext context) {
-		String name = context.getFirstToken();
-		return name == null ? null : getCommand(name);
-	}
-
-	public ICommand getCommand(String name) {
-		return commands.get(name.toUpperCase(Locale.ROOT));
+		register(commands, cmd);
 	}
 }

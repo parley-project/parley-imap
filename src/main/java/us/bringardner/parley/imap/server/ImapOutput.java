@@ -1,6 +1,6 @@
 package us.bringardner.parley.imap.server;
 
-import java.io.BufferedOutputStream;
+import us.bringardner.parley.io.IoUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,7 +17,7 @@ public final class ImapOutput {
 	private final OutputStream out;
 
 	public ImapOutput(OutputStream socketOut) {
-		this.out = new BufferedOutputStream(socketOut, 64 * 1024);
+		this.out = IoUtils.buffered(socketOut);
 	}
 
 	public ImapOutput write(String s) throws IOException {
