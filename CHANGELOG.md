@@ -18,6 +18,16 @@ are now **parley-imap**, part of the Parley library family.
 - Module name (`Automatic-Module-Name`): `us.bringardner.parley.imap`.
 - Dependencies: `parley-mail` and `parley-net`; `parley-pop3` for tests only.
 
+### Added
+
+- `ImapClientConfig.setAuthMechanisms(List)`: SASL mechanisms `ImapClient.login` may use, best first
+  (SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5, PLAIN, LOGIN). The first one the server offers is used;
+  with SCRAM the password is never sent and the server has to prove it knows it, or the connection
+  is dropped. The default (empty) keeps AUTHENTICATE PLAIN / LOGIN. A server that advertises SCRAM
+  but can't use it for an account fails the login, which is why this is off by default.
+- `ImapClient.getCapabilitySet()`: the capabilities with their parameters (`AUTH=PLAIN` is `AUTH`
+  with the parameter `PLAIN`).
+
 ### Internal
 
 - The session state is a parley-net `StateMachine` (NOT_AUTHENTICATED, AUTHENTICATED, SELECTED,

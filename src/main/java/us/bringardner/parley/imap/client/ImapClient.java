@@ -1,6 +1,11 @@
 package us.bringardner.parley.imap.client;
 
 import us.bringardner.parley.mail.Sasl;
+import us.bringardner.parley.mail.SaslPrep;
+import us.bringardner.parley.net.capability.CapabilitySet;
+import us.bringardner.parley.net.sasl.ISaslClient;
+import us.bringardner.parley.net.sasl.SaslClients;
+import us.bringardner.parley.net.sasl.SaslEncoding;
 import java.io.ByteArrayOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -180,6 +185,14 @@ public class ImapClient implements AutoCloseable {
 		return capabilities.contains(cap.toUpperCase(Locale.ROOT));
 	}
 
+	/**
+	 * The capabilities with their parameters: "AUTH=SCRAM-SHA-256" is {@code AUTH} with the
+	 * parameter {@code SCRAM-SHA-256}, so {@code getCapabilitySet().has("AUTH", "PLAIN")}.
+	 */
+	public CapabilitySet getCapabilitySet() {
+		return CapabilitySet.parseInline(String.join(" ", capabilities));
+	}
+
 	/** True after ENABLE IMAP4rev2. */
 	public boolean isRev2() {
 		return enabled.contains("IMAP4REV2");
@@ -307,7 +320,10 @@ public class ImapClient implements AutoCloseable {
 		call(() -> {
 			requireState(State.NOT_AUTHENTICATED);
 			Result r;
-			if (hasCapability("AUTH=PLAIN") && hasCapability("SASL-IR")) {
+			ISaslClient sasl = chooseSasl(user, password);
+			if (sasl != null) {
+				r = authenticate(sasl);
+			} else if (hasCapability("AUTH=PLAIN") && hasCapability("SASL-IR")) {
 				String ir = Sasl.encodePlain(user, password);
 				Command c = new Command("AUTHENTICATE", false).raw("PLAIN");
 				c.parts.add(ir);
@@ -334,6 +350,106 @@ public class ImapClient implements AutoCloseable {
 			}
 			return null;
 		});
+	}
+
+	/**
+	 * The mechanism to use from {@link ImapClientConfig#getAuthMechanisms()}, or null to log in
+	 * the usual way. User name and password are prepared with SASLprep (RFC 4013), which servers
+	 * apply to what they store; text that can't be prepared isn't used with a SASL mechanism.
+	 */
+	private ISaslClient chooseSasl(String user, String password) {
+		List<String> wanted = config.getAuthMechanisms();
+		if (wanted.isEmpty()) {
+			return null;
+		}
+		String u = SaslPrep.prepare(user, false);
+		String p = SaslPrep.prepare(password, false);
+		if (u == null || p == null) {
+			return null;
+		}
+		return SaslClients.choose(getCapabilitySet().getParams("AUTH"), wanted, u, p);
+	}
+
+	/**
+	 * AUTHENTICATE with a SASL mechanism (RFC 9051 section 6.2.2): the initial response goes with
+	 * the command when the server has SASL-IR, otherwise it answers the server's first "+".
+	 * Every later "+" is a challenge for the mechanism. The lock is held.
+	 * <p>
+	 * A mechanism that checks the server (SCRAM) must be complete when the server says OK; if
+	 * it isn't, the server accepted the login without proving it knows the password, and the
+	 * connection is dropped.
+	 */
+	private Result authenticate(ISaslClient sasl) throws IOException {
+		if (state == State.DISCONNECTED) {
+			throw new IOException("Not connected");
+		}
+		String tag = nextTag();
+		Result result = new Result();
+		currentCommand = "AUTHENTICATE";
+		waitStart = System.currentTimeMillis();
+		String line = tag + " AUTHENTICATE " + sasl.getName();
+		if (sasl.hasInitialResponse() && hasCapability("SASL-IR")) {
+			byte[] ir = sasl.initialResponse();
+			line += " " + (ir.length == 0 ? "=" : SaslEncoding.encode(ir));
+		}
+		traceLine("C: " + tag + " AUTHENTICATE " + sasl.getName() + " ***");
+		writeLine(line);
+		IOException failure = null;
+		while (true) {
+			Response r = readResponse();
+			if (r == null) {
+				throw connectionLost(new java.io.EOFException("Connection closed by the server"));
+			}
+			if (r.isContinuation()) {
+				if (failure != null) {
+					continue;
+				}
+				try {
+					byte[] response = sasl.evaluateChallenge(SaslEncoding.decode(r.text));
+					traceLine("C: ***");
+					writeLine(SaslEncoding.encode(response));
+				} catch (IllegalArgumentException | IOException e) {
+					failure = e instanceof IOException ? (IOException) e
+							: new IOException("Invalid challenge from the server");
+					writeLine("*"); // cancel; the server completes the command with BAD or NO
+				}
+				continue;
+			}
+			if (r.isUntagged()) {
+				handleUntagged(r, "AUTHENTICATE");
+				if (r.code != null) {
+					result.codes.add(r);
+				}
+				result.untagged.add(r);
+				continue;
+			}
+			if (tag.equals(r.tag)) {
+				if (failure != null) {
+					throw failure;
+				}
+				result.tagged = r;
+				handleCodes(r, "AUTHENTICATE");
+				if (r.code != null) {
+					result.codes.add(r);
+				}
+				if (!r.isOk()) {
+					throw new ImapException(r.status, r.code, r.text, "AUTHENTICATE");
+				}
+				if (!sasl.isComplete()) {
+					throw connectionLost(new IOException(
+							"The server accepted the login without completing " + sasl.getName()));
+				}
+				return result;
+			}
+		}
+	}
+
+	/** Write one line to the server. */
+	private void writeLine(String text) throws IOException {
+		synchronized (writeLock) {
+			output.write((text + "\r\n").getBytes(StandardCharsets.UTF_8));
+			output.flush();
+		}
 	}
 
 	/** LOGOUT and close the connection. */

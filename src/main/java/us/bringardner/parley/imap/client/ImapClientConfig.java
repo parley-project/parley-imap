@@ -1,5 +1,8 @@
 package us.bringardner.parley.imap.client;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 import us.bringardner.parley.net.client.DynamicTrustManager;
@@ -38,8 +41,31 @@ public class ImapClientConfig {
 	private int idleRestartMinutes = 25;
 	private int pollSeconds = 60;
 	private long maxMemoryLiteral = 64L * 1024 * 1024;
+	private List<String> authMechanisms = Collections.emptyList();
 
 	public ImapClientConfig() {
+	}
+
+	/** The SASL mechanisms {@link ImapClient#login} may use, best first; empty (the default) means PLAIN or LOGIN. */
+	public List<String> getAuthMechanisms() {
+		return authMechanisms;
+	}
+
+	/**
+	 * SASL mechanisms to use when the server offers them, best first: any of SCRAM-SHA-256,
+	 * SCRAM-SHA-1, CRAM-MD5, PLAIN and LOGIN. The first one the server offers is used, and the
+	 * password is not sent at all with SCRAM, which also checks the server knows it. Without a
+	 * match (or with the default, an empty list) the client logs in with AUTHENTICATE PLAIN or
+	 * LOGIN as before.
+	 * <p>
+	 * Some servers advertise SCRAM for every account but can't use it for accounts whose
+	 * password is stored in another scheme; the login then fails where PLAIN would have worked.
+	 * That is why this is off by default.
+	 */
+	public ImapClientConfig setAuthMechanisms(List<String> mechanisms) {
+		this.authMechanisms = mechanisms == null ? Collections.<String>emptyList()
+				: Collections.unmodifiableList(new ArrayList<>(mechanisms));
+		return this;
 	}
 
 	public ImapClientConfig(String host, Security security) {
