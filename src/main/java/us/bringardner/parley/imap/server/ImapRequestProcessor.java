@@ -18,7 +18,9 @@ import us.bringardner.parley.core.ILogger;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.net.IConnection;
 import us.bringardner.parley.mail.server.AbstractMailProcessor;
+import us.bringardner.parley.net.capability.CapabilityRegistry;
 import us.bringardner.parley.net.server.ICommand;
+import us.bringardner.parley.net.server.StateMachine;
 import us.bringardner.parley.net.server.IPrincipal;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand.State;
@@ -62,7 +64,11 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		}
 	}
 
-	private volatile State state = State.NOT_AUTHENTICATED;
+	/** NOT_AUTHENTICATED, then AUTHENTICATED, then SELECTED while a mailbox is open; LOGOUT ends it (RFC 9051 section 3). */
+	private final StateMachine<State> states = new StateMachine<>(State.NOT_AUTHENTICATED)
+			.allow(State.NOT_AUTHENTICATED, State.AUTHENTICATED, State.LOGOUT)
+			.allow(State.AUTHENTICATED, State.SELECTED, State.LOGOUT)
+			.allow(State.SELECTED, State.AUTHENTICATED, State.LOGOUT);
 	private boolean rev2;
 	private boolean utf8Accept;
 	private transient ImapInput in;
@@ -113,7 +119,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	}
 
 	private void loop() throws IOException {
-		while (running && !stopping && state != State.LOGOUT) {
+		while (running && !stopping && !states.is(State.LOGOUT)) {
 			ImapRequest req;
 			try {
 				req = reader.read();
@@ -229,7 +235,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	/** Run a command (also used by UID for its sub-command). */
 	public void run(ImapCommand cmd, ImapRequest req) throws IOException {
-		if (!cmd.isValidIn(state)) {
+		if (!cmd.isValidIn(states.get())) {
 			tagged(req.getTag(), BAD, cmd.getName() + " is not valid in the " + stateName() + " state");
 			return;
 		}
@@ -251,7 +257,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	}
 
 	private String stateName() {
-		switch (state) {
+		switch (states.get()) {
 		case NOT_AUTHENTICATED:
 			return "not authenticated";
 		case AUTHENTICATED:
@@ -352,7 +358,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			// the mailbox was deleted or renamed by another session
 			untagged(OK + " [" + CODE_CLOSED + "] The mailbox no longer exists");
 			deselect();
-			state = State.AUTHENTICATED;
+			states.moveTo(State.AUTHENTICATED);
 		}
 	}
 
@@ -363,26 +369,47 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	// ------------------------------------------------------------------ capabilities and modes
 
+	/**
+	 * What this server offers, and when (RFC 9051 section 7.2.2): STARTTLS and the login
+	 * capabilities only before login, and LOGINDISABLED instead of AUTH while TLS must come first.
+	 */
+	private static final CapabilityRegistry CAPABILITIES = new CapabilityRegistry()
+			.add(CAP_IMAP4REV1)
+			.add(CAP_IMAP4REV2)
+			.addWhen(p -> {
+				ImapRequestProcessor ip = (ImapRequestProcessor) p;
+				return ip.getState() == State.NOT_AUTHENTICATED && !ip.isTls() && ip.getImapServer().isTlsAvailable();
+			}, "STARTTLS")
+			.addWhen(p -> {
+				ImapRequestProcessor ip = (ImapRequestProcessor) p;
+				return ip.getState() == State.NOT_AUTHENTICATED && ip.isLoginBlockedUntilTls();
+			}, "LOGINDISABLED")
+			.addDynamicRequireParams("AUTH", p -> {
+				ImapRequestProcessor ip = (ImapRequestProcessor) p;
+				boolean open = ip.getState() == State.NOT_AUTHENTICATED && !ip.isLoginBlockedUntilTls();
+				return open ? us.bringardner.parley.imap.server.commands.Authenticate.mechanisms(ip) : null;
+			})
+			.addWhen(p -> {
+				ImapRequestProcessor ip = (ImapRequestProcessor) p;
+				return ip.getState() == State.NOT_AUTHENTICATED && !ip.isLoginBlockedUntilTls();
+			}, "SASL-IR")
+			.add("LITERAL+").add("ENABLE").add("IDLE").add("NAMESPACE").add("UNSELECT").add("UIDPLUS")
+			.add("ESEARCH").add("SEARCHRES").add("LIST-EXTENDED").add("LIST-STATUS").add("MOVE")
+			.add("SPECIAL-USE").add("CHILDREN").add("BINARY").add("STATUS=SIZE")
+			.add(CAP_UTF8_ACCEPT);
+
+	/** The capability list as it appears after "CAPABILITY": names separated by spaces. */
 	public String capabilities() {
-		ImapServer server = getImapServer();
-		StringBuilder sb = new StringBuilder(CAP_IMAP4REV1 + " " + CAP_IMAP4REV2);
-		if (state == State.NOT_AUTHENTICATED) {
-			if (!isTls() && server.isTlsAvailable()) {
-				sb.append(" STARTTLS");
-			}
-			if (isLoginBlockedUntilTls()) {
-				sb.append(" LOGINDISABLED");
-			} else {
-				sb.append(" AUTH=PLAIN SASL-IR");
-			}
-		}
-		sb.append(" LITERAL+ ENABLE IDLE NAMESPACE UNSELECT UIDPLUS ESEARCH SEARCHRES LIST-EXTENDED LIST-STATUS MOVE"
-				+ " SPECIAL-USE CHILDREN BINARY STATUS=SIZE " + CAP_UTF8_ACCEPT);
-		return sb.toString();
+		return CAPABILITIES.resolve(this).toInline();
 	}
 
 	public State getState() {
-		return state;
+		return states.get();
+	}
+
+	@Override
+	protected StateMachine<?> getStateMachine() {
+		return states;
 	}
 
 	/** True after "ENABLE IMAP4rev2". */
@@ -464,7 +491,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			return LoginResult.ERROR;
 		}
 		setPrincipal(p);
-		state = State.AUTHENTICATED;
+		states.moveTo(State.AUTHENTICATED);
 		return LoginResult.OK;
 	}
 
@@ -490,7 +517,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			if (tooManyLoginFailures()) {
 				untagged(BYE + " Too many failed logins");
 				flush();
-				state = State.LOGOUT;
+				states.moveTo(State.LOGOUT);
 			}
 		}
 	}
@@ -528,7 +555,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	public MailboxView select(String name, boolean readOnly) throws IOException {
 		if (view != null) {
 			deselect();
-			state = State.AUTHENTICATED;
+			states.moveTo(State.AUTHENTICATED);
 			if (rev2) {
 				untagged(OK + " [" + CODE_CLOSED + "] Previous mailbox closed");
 			}
@@ -538,7 +565,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		view = mb.newView(readOnly || !canWrite());
 		selectedName = name;
 		savedSearch = null;
-		state = State.SELECTED;
+		states.moveTo(State.SELECTED);
 		return view;
 	}
 
@@ -553,15 +580,15 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			if (store != null) {
 				store.getRegistry().release(mb);
 			}
-			if (state == State.SELECTED) {
-				state = State.AUTHENTICATED;
+			if (states.is(State.SELECTED)) {
+				states.moveTo(State.AUTHENTICATED);
 			}
 		}
 	}
 
 	public void logout() {
 		deselect();
-		state = State.LOGOUT;
+		states.moveTo(State.LOGOUT);
 	}
 
 	/** The saved search result (SEARCHRES "$"), as UIDs; empty if none. */
@@ -636,7 +663,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 					if (System.currentTimeMillis() - start > getImapServer().getAutologout()) {
 						untagged(BYE + " Autologout; idle for too long");
 						flush();
-						state = State.LOGOUT;
+						states.moveTo(State.LOGOUT);
 						return false;
 					}
 					if (view != null) {

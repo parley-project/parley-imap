@@ -49,8 +49,8 @@ public abstract class BaseCommand extends AbstractCommand implements ImapCommand
 	}
 
 	@Override
-	public boolean isValidIn(State state) {
-		return states.contains(state);
+	public Set<State> getValidStates() {
+		return states;
 	}
 
 	/** Replies NO [NOPERM] and returns false unless the user has WRITE. */

@@ -1,31 +1,51 @@
 package us.bringardner.parley.imap.server.commands;
 
-import us.bringardner.parley.mail.Sasl;
+import us.bringardner.parley.net.sasl.ISaslChannel;
+import us.bringardner.parley.net.sasl.ISaslMechanism;
+import us.bringardner.parley.net.sasl.SaslMechanisms;
+import us.bringardner.parley.net.sasl.SaslOutcome;
+import us.bringardner.parley.net.sasl.SaslServerDriver;
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 
 import us.bringardner.parley.imap.server.ImapRequest;
 import us.bringardner.parley.imap.server.ImapRequestProcessor;
+import us.bringardner.parley.imap.server.ImapSaslAuthenticator;
 
 /**
- * AUTHENTICATE PLAIN [initial-response] (RFC 9051 section 6.2.2, RFC 4616,
- * SASL-IR RFC 4959). Without an initial response the server sends "+ " and reads
- * the response; "*" cancels.
+ * AUTHENTICATE mechanism [initial-response] (RFC 9051 section 6.2.2, SASL-IR RFC 4959). The
+ * exchange itself is run by {@link SaslServerDriver}; this class supplies the IMAP parts:
+ * "+" continuations, "*" to cancel, and the replies. Which mechanisms are offered is decided by
+ * {@link ImapSaslAuthenticator} (PLAIN, RFC 4616).
  */
 public class Authenticate extends NoAuthReqBaseCommand {
 
 	private static final long serialVersionUID = 1L;
 
+	/** Every mechanism known; the authenticator limits what is offered. */
+	private static final SaslMechanisms MECHANISMS = SaslMechanisms.standard("imap");
+
 	public Authenticate() {
 		super("AUTHENTICATE", NOT_AUTHENTICATED);
 	}
 
+	/**
+	 * @return the mechanism names to advertise as AUTH=. TLS is a policy of the server (LOGINDISABLED
+	 *         until TLS), so plaintext mechanisms are not filtered here.
+	 */
+	public static List<String> mechanisms(ImapRequestProcessor p) {
+		return MECHANISMS.offered(new ImapSaslAuthenticator(p), true);
+	}
+
 	@Override
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
-		String mechanism = r.nextAtom().toUpperCase(Locale.ROOT);
-		String response = r.hasNext() ? r.nextAtom() : null;
+		String name = r.nextAtom().toUpperCase(Locale.ROOT);
+		String initial = r.hasNext() ? r.nextAtom() : null;
 		r.end();
-		if (!mechanism.equals("PLAIN")) {
+		ImapSaslAuthenticator authenticator = new ImapSaslAuthenticator(p);
+		ISaslMechanism mechanism = MECHANISMS.find(name);
+		if (mechanism == null || !MECHANISMS.offered(authenticator, true).contains(mechanism.getName())) {
 			p.no(r, CODE_CANNOT, "Unsupported authentication mechanism");
 			return;
 		}
@@ -33,30 +53,38 @@ public class Authenticate extends NoAuthReqBaseCommand {
 			p.no(r, CODE_PRIVACYREQUIRED, "Use STARTTLS before logging in");
 			return;
 		}
-		if (response == null) {
-			p.continuation("");
-			response = p.readLine();
-			if (response == null) {
-				return;
-			}
-			response = response.trim();
-		}
-		if (response.equals("*")) {
+		if ("*".equals(initial)) {
 			p.bad(r, "Authentication cancelled");
 			return;
 		}
-		byte[] decoded;
-		try {
-			decoded = Sasl.decodeResponse(response);
-		} catch (IllegalArgumentException e) {
+		SaslOutcome outcome = SaslServerDriver.authenticate(mechanism, authenticator, initial, new ISaslChannel() {
+			@Override
+			public void sendChallenge(String base64) throws IOException {
+				p.continuation(base64);
+			}
+
+			@Override
+			public String readResponse() throws IOException {
+				return p.readLine();
+			}
+		});
+		switch (outcome.getStatus()) {
+		case SUCCESS:
+			p.replyLoginResult(r, ImapRequestProcessor.LoginResult.OK);
+			break;
+		case FAILED:
+			ImapRequestProcessor.LoginResult result = authenticator.getLastResult();
+			p.replyLoginResult(r, result != null ? result : ImapRequestProcessor.LoginResult.FAILED);
+			break;
+		case CANCELLED:
+			p.bad(r, "Authentication cancelled");
+			break;
+		case MALFORMED:
 			p.bad(r, "Invalid base64");
-			return;
+			break;
+		default:
+			// CLOSED: the client went away
+			break;
 		}
-		String[] credentials = Sasl.parsePlain(decoded);
-		if (credentials == null) {
-			p.replyLoginResult(r, ImapRequestProcessor.LoginResult.FAILED);
-			return;
-		}
-		p.replyLoginResult(r, p.login(credentials[0], credentials[1]));
 	}
 }

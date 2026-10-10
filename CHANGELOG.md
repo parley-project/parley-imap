@@ -18,6 +18,17 @@ are now **parley-imap**, part of the Parley library family.
 - Module name (`Automatic-Module-Name`): `us.bringardner.parley.imap`.
 - Dependencies: `parley-mail` and `parley-net`; `parley-pop3` for tests only.
 
+### Internal
+
+- The session state is a parley-net `StateMachine` (NOT_AUTHENTICATED, AUTHENTICATED, SELECTED,
+  LOGOUT, with the legal moves declared), and `ImapCommand` is an `IStatefulCommand` with
+  `getValidStates()`. `isValidIn(State)` is still there, now a default method that uses
+  `getValidStates()`.
+- The CAPABILITY list is built from a parley-net `CapabilityRegistry`, and AUTHENTICATE runs
+  through `SaslServerDriver` with `ImapSaslAuthenticator` supplying the login. The replies,
+  response codes and the advertised `AUTH=PLAIN SASL-IR` are the same as before. Requires a
+  parley-net that has `StateMachine` and the `capability` and `sasl` packages.
+
 ### Unchanged
 
 - The `JImap.*` / `ImapServer.*` configuration properties and the mailboxes on disk.

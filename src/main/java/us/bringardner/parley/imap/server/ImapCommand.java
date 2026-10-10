@@ -2,7 +2,7 @@ package us.bringardner.parley.imap.server;
 
 import java.io.IOException;
 
-import us.bringardner.parley.net.server.ICommand;
+import us.bringardner.parley.net.server.IStatefulCommand;
 import us.bringardner.parley.net.server.IPermission;
 import us.bringardner.parley.net.server.Permission;
 
@@ -11,7 +11,7 @@ import us.bringardner.parley.net.server.Permission;
  * access control list: READ is needed to log in and read mail, WRITE to change
  * anything (flags, mailboxes, messages).
  */
-public interface ImapCommand extends ICommand {
+public interface ImapCommand extends IStatefulCommand<ImapCommand.State> {
 
 	IPermission READ_PERMISSION = new Permission("READ");
 	IPermission WRITE_PERMISSION = new Permission("WRITE");
@@ -23,8 +23,15 @@ public interface ImapCommand extends ICommand {
 
 	void execute(ImapRequestProcessor processor, ImapRequest request) throws IOException;
 
-	/** True if the command may be used in this state. */
-	boolean isValidIn(State state);
+	/** The session states the command may be used in (RFC 9051 section 3). */
+	@Override
+	java.util.Set<State> getValidStates();
+
+	/** True if the command may be used in this state; by default, if it is in {@link #getValidStates()}. */
+	default boolean isValidIn(State state) {
+		java.util.Set<State> valid = getValidStates();
+		return valid == null || valid.isEmpty() || valid.contains(state);
+	}
 
 	/** True for commands that may follow UID (COPY, FETCH, MOVE, SEARCH, STORE, EXPUNGE). */
 	default boolean isUidCommand() {
