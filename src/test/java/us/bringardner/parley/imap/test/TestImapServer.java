@@ -754,7 +754,11 @@ public class TestImapServer {
 			c.ok("STORE 2 +FLAGS (\\Deleted)");
 			c.ok("EXPUNGE");
 		}
-		String index = new String(dir.getChild(".imap-index").getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+		String index;
+		//  Closed: Windows won't let the server rename the index while this test still has it open
+		try (InputStream in = dir.getChild(".imap-index").getInputStream()) {
+			index = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		}
 		assertTrue(index.contains("\\Seen $Keep"), index);
 		try (ImapClient c = login("tony", "secret")) {
 			List<String> r = c.ok("SELECT INBOX");
