@@ -1,6 +1,6 @@
 # Changelog
 
-## parley-imap 1.0.0 (unreleased)
+## parley-imap 1.0.0 (2026-10-16)
 
 The IMAP server and client of BjlEmail (`us.bringardner:bjl_email` 1.0.0-SNAPSHOT, never released)
 are now **parley-imap**, part of the Parley library family.
