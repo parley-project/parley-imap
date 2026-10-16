@@ -304,6 +304,7 @@ public final class SearchQuery {
 		return Pattern.compile(text, Pattern.LITERAL | Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	}
 
+	@SuppressWarnings("resource")   // the Ctx owns the parsed message and closes it
 	private static Key header(String name, String text) {
 		Pattern p = pattern(text);
 		boolean any = text.isEmpty();
