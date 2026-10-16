@@ -25,7 +25,6 @@ import java.util.Set;
 
 import us.bringardner.parley.mail.Address;
 import us.bringardner.parley.net.client.DynamicTrustManager;
-import us.bringardner.parley.net.client.DynamicTrustManager.CertificateValidator.ManageAs;
 import us.bringardner.parley.core.util.Hex;
 
 /**
