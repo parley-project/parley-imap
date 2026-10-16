@@ -33,7 +33,6 @@ import us.bringardner.parley.mail.store.MailboxRegistry;
  */
 public class ImapServer extends AbstractMailServer implements IMAP {
 
-	private static final long serialVersionUID = 1L;
 
 	public static final String IMAP_NAME = "JImap";
 	public static final String CONFIG_PROP = IMAP_NAME + ".properties";
