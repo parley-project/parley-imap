@@ -119,9 +119,9 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		warnIfNoAccessControl();
 	}
 
+	/** Unsaved flag changes are saved after the sessions end and while the store's locks still work. */
 	@Override
-	public void stop() {
-		super.stop();
+	protected void releasingStore() {
 		registry.saveAll();
 	}
 

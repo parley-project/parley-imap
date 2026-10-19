@@ -1,5 +1,22 @@
 # Changelog
 
+## parley-imap 1.1.0 (unreleased)
+
+### Added
+
+- **Several servers on one store** (parley-mail 1.1.0's `parley.mail.sharedStore`): mailbox changes run under
+  locks that reach the other servers (parley-net's locks), and a session sees their changes at its next NOOP,
+  IDLE check or command.
+- If another server deletes and recreates the selected mailbox (a new UIDVALIDITY), the session is sent
+  `OK [CLOSED]` and the mailbox is deselected, so the client selects it again and sees the new UIDVALIDITY
+  instead of using UIDs that now name other messages.
+
+### Changed (no code change needed)
+
+- Unsaved flag changes are saved when the server stops, after the sessions end and before the store claim is
+  given up (`releasingStore()`), so the store's locks still work.
+- Dependencies: parley-mail, parley-net and parley-pop3 (tests) 1.1.0.
+
 ## parley-imap 1.0.0 (2026-10-16)
 
 The IMAP server and client of BjlEmail (`us.bringardner:bjl_email` 1.0.0-SNAPSHOT, never released)
