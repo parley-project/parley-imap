@@ -339,6 +339,14 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		Mailbox mb = view.getMailbox();
 		mb.refresh(false);
 		MailboxView.Updates u = view.collectUpdates(allowExpunge);
+		if (u.uidValidityChanged) {
+			// another server deleted and recreated the mailbox: the UIDs the client has mean
+			// nothing now, so close it; selecting it again gives the new UIDVALIDITY
+			untagged(OK + " [" + CODE_CLOSED + "] The mailbox was recreated; select it again");
+			deselect();
+			states.moveTo(State.AUTHENTICATED);
+			return;
+		}
 		for (int msn : u.expunged) {
 			untagged(msn + " EXPUNGE");
 		}

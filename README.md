@@ -73,6 +73,12 @@ maildrop, other mailboxes are directories under `<inbox>/.mailboxes`, and each h
 See the parley-mail README for the layout. New users get Sent, Drafts, Trash, Junk and Archive;
 turn this off with `JImap.defaultMailboxes=false`.
 
+Several servers (IMAP, POP3, SMTP, in any number of JVMs) can share a store when
+`parley.mail.sharedStore` allows it (`off`, the default, `host` or `cluster`). A session sees other
+servers' changes at its next NOOP, IDLE check or command, within a second. If another server deletes
+and recreates the selected mailbox (a new UIDVALIDITY), the session gets `OK [CLOSED]` and must
+select it again. See "Several servers on one store" in the parley-mail README.
+
 ### Users and permissions
 
 Users come from the access control list, set up as for Pop3Server with the `ImapServer.AuthenticationProvider` property (e.g. `FileBasedAcl` with `ImapServer.userFile`). READ is needed to log in. WRITE is needed for any change: without it, SELECT opens mailboxes read-only, and APPEND, CREATE, DELETE and RENAME get `NO [NOPERM]`. User names and passwords are prepared with SASLprep (RFC 4013), as for POP3.
