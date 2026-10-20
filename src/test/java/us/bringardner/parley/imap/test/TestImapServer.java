@@ -30,7 +30,10 @@ import org.junit.jupiter.api.Test;
 import us.bringardner.parley.core.ILogger.Level;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
+import us.bringardner.parley.net.sasl.ISaslClient;
+import us.bringardner.parley.net.sasl.ScramMechanism;
 import us.bringardner.parley.net.server.FileBasedAcl;
+import us.bringardner.parley.net.server.IAccessControlList;
 import us.bringardner.parley.net.server.IServer;
 import us.bringardner.parley.imap.server.ImapServer;
 import us.bringardner.parley.pop3.server.Maildrop;
@@ -255,6 +258,79 @@ public class TestImapServer {
 		}
 		try (ImapClient c = connect()) {
 			assertTrue(tagged(c.cmd("AUTHENTICATE CRAM-MD5")).contains("NO"));
+		}
+	}
+
+	/** Users who all have SCRAM credentials, so the server offers SCRAM. */
+	static IAccessControlList scramAcl() {
+		final String carol = FileBasedAcl.hashPasswordWithScram("carolpw".toCharArray());
+		final String nobody = FileBasedAcl.hashPasswordWithScram("pw".toCharArray());
+		return new FileBasedAcl() {
+			{
+				parseLine("carol, " + carol + ", READ|WRITE");
+				parseLine("noread, " + nobody + ", WRITE");
+			}
+		};
+	}
+
+	/** AUTHENTICATE with SCRAM; returns the tagged reply. */
+	private static String scram(ImapClient c, ScramMechanism m, String user, String password) throws Exception {
+		ISaslClient client = m.client(user, password);
+		Base64.Encoder enc = Base64.getEncoder();
+		c.send("s1 AUTHENTICATE " + m.getName() + " " + enc.encodeToString(client.initialResponse()));
+		for (;;) {
+			String line = c.readLine();
+			if (!line.startsWith("+ ")) {
+				return line;
+			}
+			byte[] challenge = Base64.getDecoder().decode(line.substring(2).trim());
+			byte[] response;
+			try {
+				response = client.evaluateChallenge(challenge);
+			} catch (us.bringardner.parley.net.sasl.SaslException e) {
+				c.send("*");
+				return c.readLine();
+			}
+			c.send(enc.encodeToString(response));
+		}
+	}
+
+	@Test
+	public void testAuthenticateScram() throws Exception {
+		try (ImapClient c = connect()) {
+			// the test users include a hashed password without SCRAM credentials: SCRAM isn't offered
+			String caps = find(c.ok("CAPABILITY"), "* CAPABILITY");
+			assertFalse(caps.contains("SCRAM"), caps);
+			assertTrue(tagged(c.cmd("AUTHENTICATE SCRAM-SHA-256")).contains("NO"));
+		}
+		IAccessControlList old = server.getAccessControl();
+		server.setAccessControl(scramAcl());
+		try {
+			reset("carol");
+			try (ImapClient c = connect()) {
+				String caps = find(c.ok("CAPABILITY"), "* CAPABILITY");
+				assertTrue(caps.contains("AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=PLAIN"), caps);
+				String reply = scram(c, ScramMechanism.SHA_256, "carol", "carolpw");
+				assertTrue(reply.startsWith("s1 OK"), reply);
+				c.ok("SELECT INBOX");
+				assertTrue(tagged(c.cmd("AUTHENTICATE SCRAM-SHA-1")).contains("BAD"), "already logged in");
+			}
+			try (ImapClient c = connect()) {
+				String reply = scram(c, ScramMechanism.SHA_1, "carol", "carolpw");
+				assertTrue(reply.startsWith("s1 OK"), reply);
+			}
+			try (ImapClient c = connect()) {
+				String reply = scram(c, ScramMechanism.SHA_256, "carol", "wrong");
+				assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
+				reply = scram(c, ScramMechanism.SHA_256, "nobody", "carolpw");
+				assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
+				reply = scram(c, ScramMechanism.SHA_256, "noread", "pw");
+				assertTrue(reply.startsWith("s1 NO [AUTHORIZATIONFAILED]"), "needs READ: " + reply);
+				// the password still works with PLAIN
+				c.ok("AUTHENTICATE PLAIN " + Base64.getEncoder().encodeToString(bytes("\0carol\0carolpw")));
+			}
+		} finally {
+			server.setAccessControl(old);
 		}
 	}
 

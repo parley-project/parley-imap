@@ -485,7 +485,23 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		if (isLoginBlockedUntilTls()) {
 			return LoginResult.TLS_REQUIRED;
 		}
-		IPrincipal p = authenticate(user, password);
+		return completeLogin(authenticate(user, password));
+	}
+
+	/**
+	 * Log in a user a SASL mechanism has already proven (AUTHENTICATE SCRAM-*): the same checks
+	 * as {@link #login(String, String)} after the password.
+	 *
+	 * @since 1.1.0
+	 */
+	public LoginResult loginVerified(String user) {
+		if (isLoginBlockedUntilTls()) {
+			return LoginResult.TLS_REQUIRED;
+		}
+		return completeLogin(verifiedPrincipal(user));
+	}
+
+	private LoginResult completeLogin(IPrincipal p) {
 		if (p == null) {
 			return LoginResult.FAILED;
 		}
