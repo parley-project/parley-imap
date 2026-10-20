@@ -76,6 +76,9 @@ public class Authenticate extends NoAuthReqBaseCommand {
 			break;
 		case FAILED:
 			ImapRequestProcessor.LoginResult result = authenticator.getLastResult();
+			if (result == null && authenticator.isUnavailable()) {
+				result = ImapRequestProcessor.LoginResult.UNAVAILABLE;
+			}
 			p.replyLoginResult(r, result != null ? result : ImapRequestProcessor.LoginResult.FAILED);
 			break;
 		case CANCELLED:

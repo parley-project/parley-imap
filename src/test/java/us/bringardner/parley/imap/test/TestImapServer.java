@@ -334,6 +334,63 @@ public class TestImapServer {
 		}
 	}
 
+	/** An access control list whose database is down: every lookup throws. */
+	static IAccessControlList downAcl() {
+		return new IAccessControlList() {
+			@Override
+			public void initialize(us.bringardner.parley.net.server.IServer s) {
+			}
+
+			@Override
+			public boolean checkPermission(us.bringardner.parley.net.server.IPrincipal user, us.bringardner.parley.net.server.IPermission action) {
+				return false;
+			}
+
+			@Override
+			public us.bringardner.parley.net.server.IPrincipal getPrincipal(String user) {
+				return null;
+			}
+
+			@Override
+			public us.bringardner.parley.net.server.IPrincipal findPrincipal(String user) throws us.bringardner.parley.net.server.AccessControlUnavailableException {
+				throw new us.bringardner.parley.net.server.AccessControlUnavailableException("the database is down");
+			}
+
+			@Override
+			public boolean supportsScram(String hash) {
+				return true;
+			}
+
+			@Override
+			public us.bringardner.parley.net.sasl.ScramCredentials getScramCredentials(String user, String hash)
+					throws us.bringardner.parley.net.server.AccessControlUnavailableException {
+				throw new us.bringardner.parley.net.server.AccessControlUnavailableException("the database is down");
+			}
+		};
+	}
+
+	@Test
+	public void testAccessControlUnavailable() throws Exception {
+		IAccessControlList old = server.getAccessControl();
+		server.setAccessControl(downAcl());
+		us.bringardner.parley.core.ILogger.Level level = server.getLogger().getLevel();
+		server.getLogger().setLevel(Level.NONE);
+		try (ImapClient c = connect()) {
+			// never counted as a failed login: the connection stays open however many times
+			for (int i = 0; i < 6; i++) {
+				String reply = tagged(c.cmd("LOGIN tony secret"));
+				assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
+			}
+			String reply = tagged(c.cmd("AUTHENTICATE PLAIN " + Base64.getEncoder().encodeToString(bytes("\0tony\0secret"))));
+			assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
+			reply = scram(c, ScramMechanism.SHA_256, "tony", "secret");
+			assertTrue(reply.startsWith("s1 NO [UNAVAILABLE]"), reply);
+		} finally {
+			server.setAccessControl(old);
+			server.getLogger().setLevel(level);
+		}
+	}
+
 	@Test
 	public void testStartTlsAndRequireTls() throws Exception {
 		server.setRequireTls(true);

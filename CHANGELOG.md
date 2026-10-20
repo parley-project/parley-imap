@@ -4,6 +4,9 @@
 
 ### Added
 
+- When the access control list can't answer (its database is down), LOGIN and AUTHENTICATE get
+  `NO [UNAVAILABLE]` (try again later), not "invalid user name or password", and it isn't counted as a failed
+  login (`LoginResult.UNAVAILABLE`). `ImapServer.deliver` fails instead of guessing the user's mail store.
 - **SCRAM-SHA-256 and SCRAM-SHA-1** for `AUTHENTICATE`, offered in CAPABILITY when the server's access control list keeps SCRAM
   credentials for every user (parley-net 1.1.0: `FileBasedAcl --scram`, or parley-net-acl-jdbc). The user is
   logged in with `ImapRequestProcessor.loginVerified(user)` after the proof, with the same permission checks as a password login.

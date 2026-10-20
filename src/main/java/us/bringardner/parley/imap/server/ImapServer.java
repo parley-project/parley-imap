@@ -177,7 +177,8 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	 */
 	public long deliver(String user, String mailbox, Message message, java.util.Set<String> flags) throws IOException {
 		IAccessControlList acl = getAccessControl();
-		IPrincipal p = acl == null ? null : acl.getPrincipal(user);
+		// a list that can't answer throws: the message isn't delivered to a guessed maildrop
+		IPrincipal p = acl == null ? null : acl.findPrincipal(user);
 		MailStore store = new MailStore(p != null ? getInboxDirectory(p) : getInboxDirectory(user), registry);
 		store.init(createDefaultMailboxes);
 		Mailbox m = store.open(mailbox == null ? INBOX : mailbox);
