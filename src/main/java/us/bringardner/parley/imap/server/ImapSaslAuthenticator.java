@@ -4,6 +4,7 @@ import us.bringardner.parley.imap.server.ImapRequestProcessor.LoginResult;
 import us.bringardner.parley.net.sasl.ISaslAuthenticator;
 import us.bringardner.parley.net.sasl.ScramCredentials;
 import us.bringardner.parley.net.sasl.ScramMechanism;
+import us.bringardner.parley.net.server.AccessControlUnavailableException;
 
 /**
  * Checks SASL passwords the way LOGIN does: through {@link ImapRequestProcessor#login}, which
@@ -21,6 +22,7 @@ public class ImapSaslAuthenticator implements ISaslAuthenticator {
 
 	private final ImapRequestProcessor processor;
 	private LoginResult lastResult;
+	private boolean unavailable;
 
 	public ImapSaslAuthenticator(ImapRequestProcessor processor) {
 		this.processor = processor;
@@ -49,6 +51,16 @@ public class ImapSaslAuthenticator implements ISaslAuthenticator {
 	/** SCRAM credentials from the server's access control list (the name prepared with SASLprep). */
 	@Override
 	public ScramCredentials getScramCredentials(String user, String hash) {
-		return processor.getScramCredentials(user, hash);
+		try {
+			return processor.getScramCredentials(user, hash);
+		} catch (AccessControlUnavailableException e) {
+			unavailable = true;
+			return null;
+		}
+	}
+
+	/** @return true if the access control list couldn't answer, so the login failed for that reason */
+	public boolean isUnavailable() {
+		return unavailable || lastResult == LoginResult.UNAVAILABLE;
 	}
 }

@@ -21,6 +21,7 @@ import us.bringardner.parley.mail.server.AbstractMailProcessor;
 import us.bringardner.parley.net.capability.CapabilityRegistry;
 import us.bringardner.parley.net.server.ICommand;
 import us.bringardner.parley.net.server.StateMachine;
+import us.bringardner.parley.net.server.AccessControlUnavailableException;
 import us.bringardner.parley.net.server.IPrincipal;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand.State;
@@ -49,7 +50,9 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	public static final String PARAMETER_MAILDROP = "maildrop";
 
 	public enum LoginResult {
-		OK, FAILED, NOT_AUTHORIZED, TLS_REQUIRED, ERROR
+		OK, FAILED, NOT_AUTHORIZED, TLS_REQUIRED, ERROR,
+		/** The access control list can't answer now (its database is down, say): try again later. @since 1.1.0 */
+		UNAVAILABLE
 	}
 
 	/** Socket timeout: how often a waiting session checks for autologout and stop. */
@@ -485,7 +488,12 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		if (isLoginBlockedUntilTls()) {
 			return LoginResult.TLS_REQUIRED;
 		}
-		return completeLogin(authenticate(user, password));
+		try {
+			return completeLogin(checkLogin(user, password));
+		} catch (AccessControlUnavailableException e) {
+			logError("Can't check the login of " + user + ": " + e.getMessage());
+			return LoginResult.UNAVAILABLE;
+		}
 	}
 
 	/**
@@ -498,7 +506,12 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		if (isLoginBlockedUntilTls()) {
 			return LoginResult.TLS_REQUIRED;
 		}
-		return completeLogin(verifiedPrincipal(user));
+		try {
+			return completeLogin(verifiedPrincipal(user));
+		} catch (AccessControlUnavailableException e) {
+			logError("Can't look up " + user + ": " + e.getMessage());
+			return LoginResult.UNAVAILABLE;
+		}
 	}
 
 	private LoginResult completeLogin(IPrincipal p) {
@@ -534,6 +547,10 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			break;
 		case ERROR:
 			no(req, CODE_UNAVAILABLE, "The mail store can't be opened");
+			break;
+		case UNAVAILABLE:
+			// not the client's fault: no delay, not counted as a failed login
+			no(req, CODE_UNAVAILABLE, "Logins can't be checked now, try again later");
 			break;
 		default:
 			loginFailedDelay();
