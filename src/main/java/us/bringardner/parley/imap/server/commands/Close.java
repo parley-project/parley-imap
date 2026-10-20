@@ -26,8 +26,10 @@ public class Close extends BaseCommand {
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		r.end();
 		MailboxView view = p.getView();
-		if (!view.isReadOnly()) {
+		if (!view.isReadOnly() && !view.isRecreated()) {
+			// recreated by another server: its messages aren't the ones marked here, so none go
 			Mailbox mb = view.getMailbox();
+			long uidValidity = mb.getUidValidity();
 			List<Long> deleted = new ArrayList<>();
 			for (MessageInfo m : mb.getMessages()) {
 				if (mb.hasFlag(m, DELETED)) {
@@ -35,7 +37,7 @@ public class Close extends BaseCommand {
 				}
 			}
 			if (!deleted.isEmpty()) {
-				mb.expunge(deleted, view);
+				mb.expunge(deleted, view, uidValidity);
 			}
 		}
 		p.deselect();

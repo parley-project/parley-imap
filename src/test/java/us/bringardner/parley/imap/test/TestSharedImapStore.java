@@ -117,6 +117,28 @@ public class TestSharedImapStore {
 	}
 
 	@Test
+	public void anExpungeAfterTheMailboxWasRecreatedRemovesNothing() throws Exception {
+		FileSource dir = server.getInboxDirectory("tony").getChild(us.bringardner.parley.mail.store.MailStore.MAILBOXES).getChild("shared4");
+		other.append(other.open(dir), "old");
+		try (ImapClient c = new ImapClient(server.getLocalPort())) {
+			c.login("tony", "secret");
+			c.cmd("SELECT shared4");
+			List<String> r = c.cmd("STORE 1 +FLAGS (\\Deleted)");
+			assertTrue(r.get(r.size() - 1).contains(" OK "), r.toString());
+			// the other server deletes it and makes it again, with a message of the same UID
+			other.deleteMailbox(dir);
+			Mailbox theirs = other.open(dir);
+			other.append(theirs, "new");
+			r = c.cmd("EXPUNGE");
+			assertTrue(find(r, "* OK [CLOSED]") != null, "closed: " + r);
+			assertTrue(find(r, "* 1 EXPUNGE") == null, "and nothing expunged: " + r);
+			c.cmd("LOGOUT");
+			theirs.refresh(true);
+			assertEquals(1, theirs.count(), "the other server's new message is still there");
+		}
+	}
+
+	@Test
 	public void flagsSetHereReachTheOtherServer() throws Exception {
 		FileSource dir = server.getInboxDirectory("tony").getChild(us.bringardner.parley.mail.store.MailStore.MAILBOXES).getChild("shared3");
 		Mailbox theirs = other.open(dir);

@@ -7,6 +7,7 @@ import java.util.List;
 import us.bringardner.parley.imap.server.ImapRequest;
 import us.bringardner.parley.imap.server.ImapRequestProcessor;
 import us.bringardner.parley.mail.store.Mailbox;
+import us.bringardner.parley.mail.store.MailboxView;
 import us.bringardner.parley.mail.store.MessageInfo;
 
 /** EXPUNGE (RFC 9051 section 6.4.3) and UID EXPUNGE set (UIDPLUS). */
@@ -33,16 +34,19 @@ public class Expunge extends BaseCommand {
 		if (!checkReadWrite(p, r)) {
 			return;
 		}
-		Mailbox mb = p.getView().getMailbox();
+		MailboxView view = p.getView();
+		Mailbox mb = view.getMailbox();
+		long uidValidity = mb.getUidValidity(); // before the UIDs are read
 		List<Long> deleted = new ArrayList<>();
 		for (MessageInfo m : mb.getMessages()) {
 			if (mb.hasFlag(m, DELETED) && (only == null || only.contains(m.getUid()))) {
 				deleted.add(m.getUid());
 			}
 		}
-		if (!deleted.isEmpty()) {
-			// every view, this one included, is told; ok() sends the EXPUNGE responses
-			mb.expunge(deleted, null);
+		if (!deleted.isEmpty() && !view.isRecreated()) {
+			// every view, this one included, is told; ok() sends the EXPUNGE responses. Nothing is
+			// removed if another server recreated the mailbox: ok() then closes it ([CLOSED])
+			mb.expunge(deleted, null, uidValidity);
 		}
 		p.ok(r, "EXPUNGE completed");
 	}

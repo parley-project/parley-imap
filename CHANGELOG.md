@@ -9,7 +9,8 @@
   IDLE check or command.
 - If another server deletes and recreates the selected mailbox (a new UIDVALIDITY), the session is sent
   `OK [CLOSED]` and the mailbox is deselected, so the client selects it again and sees the new UIDVALIDITY
-  instead of using UIDs that now name other messages.
+  instead of using UIDs that now name other messages. EXPUNGE and CLOSE in that session remove nothing from the
+  new mailbox.
 
 ### Changed (no code change needed)
 
