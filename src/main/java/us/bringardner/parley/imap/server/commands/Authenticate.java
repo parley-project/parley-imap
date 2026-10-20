@@ -70,7 +70,9 @@ public class Authenticate extends NoAuthReqBaseCommand {
 		});
 		switch (outcome.getStatus()) {
 		case SUCCESS:
-			p.replyLoginResult(r, ImapRequestProcessor.LoginResult.OK);
+			// PLAIN logged in while checking the password; SCRAM proved the user without one
+			ImapRequestProcessor.LoginResult ok = authenticator.getLastResult();
+			p.replyLoginResult(r, ok != null ? ok : p.loginVerified(outcome.getUser()));
 			break;
 		case FAILED:
 			ImapRequestProcessor.LoginResult result = authenticator.getLastResult();

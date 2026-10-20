@@ -4,6 +4,9 @@
 
 ### Added
 
+- **SCRAM-SHA-256 and SCRAM-SHA-1** for `AUTHENTICATE`, offered in CAPABILITY when the server's access control list keeps SCRAM
+  credentials for every user (parley-net 1.1.0: `FileBasedAcl --scram`, or parley-net-acl-jdbc). The user is
+  logged in with `ImapRequestProcessor.loginVerified(user)` after the proof, with the same permission checks as a password login.
 - **Several servers on one store** (parley-mail 1.1.0's `parley.mail.sharedStore`): mailbox changes run under
   locks that reach the other servers (parley-net's locks), and a session sees their changes at its next NOOP,
   IDLE check or command.
