@@ -58,7 +58,7 @@ import us.bringardner.parley.imap.client.MessageSummary;
 import us.bringardner.parley.imap.client.SearchCriteria;
 import us.bringardner.parley.imap.client.SelectedMailbox;
 import us.bringardner.parley.imap.server.ImapServer;
-import us.bringardner.parley.pop3.test.TestPop3Server;
+import us.bringardner.parley.net.ServerTestSupport;
 
 /**
  * The IMAP client library and command-line program against an in-process
@@ -86,9 +86,9 @@ public class TestImapClient {
 
 	@BeforeAll
 	public static void startServer() throws Exception {
-		TestPop3Server.makeTestKeystore(new File(KEYSTORE));
+		ServerTestSupport.writeKeystore(new File(KEYSTORE));
 		System.setProperty("ImapServer.KeyStoreName", KEYSTORE);
-		System.setProperty("ImapServer.KeyStorePassword", TestPop3Server.KEYSTORE_PASSWORD);
+		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
 		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, "Pop3TestAcl.txt");
 		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());

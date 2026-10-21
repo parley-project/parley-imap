@@ -20,7 +20,7 @@ import us.bringardner.parley.mail.store.MailLocks;
 import us.bringardner.parley.mail.store.Mailbox;
 import us.bringardner.parley.net.server.FileBasedAcl;
 import us.bringardner.parley.net.server.IServer;
-import us.bringardner.parley.pop3.test.TestPop3Server;
+import us.bringardner.parley.net.ServerTestSupport;
 
 /** An IMAP server on a store shared with another server ({@code parley.mail.sharedStore=cluster}). */
 public class TestSharedImapStore {
@@ -33,9 +33,9 @@ public class TestSharedImapStore {
 	@BeforeAll
 	public static void start() throws Exception {
 		String keystore = java.nio.file.Files.createTempDirectory("parley-imap-shared").resolve("keystore.p12").toString();
-		TestPop3Server.makeTestKeystore(new File(keystore));
+		ServerTestSupport.writeKeystore(new File(keystore));
 		System.setProperty("ImapServer.KeyStoreName", keystore);
-		System.setProperty("ImapServer.KeyStorePassword", TestPop3Server.KEYSTORE_PASSWORD);
+		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
 		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, "Pop3TestAcl.txt");
 		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());

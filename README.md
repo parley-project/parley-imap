@@ -30,8 +30,9 @@ Requires Java 11 or later. Depends on `parley-mail` and `parley-net` (which brin
 mvn package
 ```
 
-Tests run with a 64 MB heap, so message bodies must stay out of memory. The tests start a POP3
-server too (from parley-pop3, test scope only) to check that both see the same mail.
+Tests run with a 64 MB heap, so message bodies must stay out of memory. The mail protocols don't
+depend on each other, not even in tests: that INBOX is the maildrop POP3 shares is tested here
+against the directory (parley-mail's format), and parley-pop3 tests its side.
 
 ## IMAP server
 
