@@ -3,6 +3,7 @@ package us.bringardner.parley.imap.test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static us.bringardner.parley.mail.test.MailTestSupport.ACL_FILE;
 
 import java.io.File;
 import java.util.List;
@@ -37,7 +38,7 @@ public class TestSharedImapStore {
 		System.setProperty("ImapServer.KeyStoreName", keystore);
 		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
-		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, "Pop3TestAcl.txt");
+		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
 		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		before = System.getProperty(MailLocks.SHARED_STORE_PROPERTY);
 		System.setProperty(MailLocks.SHARED_STORE_PROPERTY, "cluster");
