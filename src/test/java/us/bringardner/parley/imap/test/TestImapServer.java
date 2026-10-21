@@ -36,13 +36,11 @@ import us.bringardner.parley.net.server.FileBasedAcl;
 import us.bringardner.parley.net.server.IAccessControlList;
 import us.bringardner.parley.net.server.IServer;
 import us.bringardner.parley.imap.server.ImapServer;
-import us.bringardner.parley.pop3.server.Maildrop;
-import us.bringardner.parley.pop3.server.Pop3Server;
-import us.bringardner.parley.pop3.test.TestPop3Server;
+import us.bringardner.parley.net.ServerTestSupport;
 
 /**
  * End-to-end tests of ImapServer over real sockets: IMAP4rev1 and IMAP4rev2
- * clients, two sessions on one mailbox, mail shared with Pop3Server, and a
+ * clients, two sessions on one mailbox, INBOX as the maildrop POP3 shares, and a
  * message larger than the test heap.
  */
 public class TestImapServer {
@@ -59,16 +57,15 @@ public class TestImapServer {
 	}
 
 	private static ImapServer server;
-	private static Pop3Server pop3;
 	private static FileSource root;
 	private static int port;
 
 	@BeforeAll
 	public static void startServer() throws Exception {
-		TestPop3Server.makeTestKeystore(new File(KEYSTORE));
-		for (String prefix : new String[] {"ImapServer", "Pop3Server"}) {
+		ServerTestSupport.writeKeystore(new File(KEYSTORE));
+		for (String prefix : new String[] {"ImapServer"}) {
 			System.setProperty(prefix + ".KeyStoreName", KEYSTORE);
-			System.setProperty(prefix + ".KeyStorePassword", TestPop3Server.KEYSTORE_PASSWORD);
+			System.setProperty(prefix + ".KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 			System.setProperty(prefix + ".KeyStoreType", "PKCS12");
 			System.setProperty(prefix + "." + FileBasedAcl.PROP_FILE_NAME, "Pop3TestAcl.txt");
 			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
@@ -80,21 +77,12 @@ public class TestImapServer {
 		server.getLogger().setLevel(Level.ERROR);
 		server.startAndWait(10000);
 		port = server.getLocalPort();
-
-		pop3 = new Pop3Server(0, Pop3Server.POP3_NAME, false);
-		pop3.setMaildropRoot(root);
-		pop3.setLoginFailureDelay(0);
-		pop3.getLogger().setLevel(Level.ERROR);
-		pop3.startAndWait(10000);
 	}
 
 	@AfterAll
 	public static void stopServer() throws Exception {
 		if (server != null) {
 			server.stop();
-		}
-		if (pop3 != null) {
-			pop3.stop();
 		}
 		if (root != null) {
 			deleteAll(root);
@@ -811,44 +799,25 @@ public class TestImapServer {
 	// ------------------------------------------------------------------ shared with POP3
 
 	/** A small POP3 conversation. */
-	private static final class Pop3 implements AutoCloseable {
-		final Socket s;
-		final InputStream in;
-		final OutputStream out;
-
-		Pop3() throws IOException {
-			s = new Socket("localhost", pop3.getLocalPort());
-			s.setSoTimeout(30000);
-			in = new BufferedInputStream(s.getInputStream());
-			out = s.getOutputStream();
-			line();
-		}
-
-		String line() throws IOException {
-			StringBuilder sb = new StringBuilder();
-			int b;
-			while ((b = in.read()) >= 0 && b != '\n') {
-				if (b != '\r') {
-					sb.append((char) b);
-				}
+	/** The INBOX's mail files: what a POP3 server sees in the maildrop (files whose names don't start with "."). */
+	private static List<FileSource> maildropFiles(FileSource dir) throws IOException {
+		List<FileSource> ret = new java.util.ArrayList<>();
+		for (FileSource f : dir.listFiles()) {
+			if (!f.getName().startsWith(".") && f.isFile()) {
+				ret.add(f);
 			}
-			return sb.toString();
 		}
-
-		String cmd(String text) throws IOException {
-			out.write((text + "\r\n").getBytes(StandardCharsets.UTF_8));
-			out.flush();
-			return line();
-		}
-
-		@Override
-		public void close() throws IOException {
-			s.close();
-		}
+		return ret;
 	}
 
+	/**
+	 * The INBOX is the user's maildrop, in parley-mail's format: one message per file, files and
+	 * directories whose names start with "." and other mailboxes' directories are not messages. A
+	 * POP3 server (or anything else) works on the same directory, so IMAP must see what it does to
+	 * it. Tested here against the directory, without a POP3 server; parley-pop3 tests its side.
+	 */
 	@Test
-	public void testSharedWithPop3() throws Exception {
+	public void testInboxIsTheMaildrop() throws Exception {
 		FileSource team = reset("team");
 		try (ImapClient c = login("team1", "secret")) {
 			c.ok("SELECT INBOX");
@@ -856,32 +825,32 @@ public class TestImapServer {
 			c.append("INBOX", null, bytes(SIMPLE));
 			c.append("Folder", null, bytes(SIMPLE));
 
-			// POP3 sees INBOX only, not the IMAP files and mailboxes
-			try (Pop3 p = new Pop3()) {
-				assertTrue(p.cmd("USER team2").startsWith("+OK"));
-				assertTrue(p.cmd("PASS secret").startsWith("+OK"));
-				assertEquals("+OK 1 " + SIMPLE.length(), p.cmd("STAT"));
-				assertTrue(p.cmd("DELE 1").startsWith("+OK"));
-				assertTrue(p.cmd("QUIT").startsWith("+OK"));
-			}
-			List<String> r = c.ok("NOOP");
-			assertEquals("* 1 EXPUNGE", r.get(0), "a POP3 deletion is an expunge: " + r);
+			// the maildrop has the INBOX message only, not IMAP's own files or other mailboxes
+			List<FileSource> files = maildropFiles(team);
+			assertEquals(1, files.size(), "INBOX's message only: " + files);
+			assertEquals(SIMPLE.length(), files.get(0).length());
 
-			// mail delivered to the maildrop appears in INBOX
-			Maildrop.deliver(team, new java.io.ByteArrayInputStream(bytes(SIMPLE.replace("\r\n", "\n"))));
+			// a message removed from the maildrop (POP3 DELE and QUIT) is an expunge
+			assertTrue(files.get(0).delete());
 			Thread.sleep(1100); // refresh is throttled to once a second
+			List<String> r = c.ok("NOOP");
+			assertEquals("* 1 EXPUNGE", r.get(0), "a message gone from the maildrop is expunged: " + r);
+
+			// mail delivered to the maildrop (a hidden temp file renamed, LF line ends) appears in INBOX
+			String name = String.format("%013d.%08d.%08x.eml", System.currentTimeMillis(), 1, 0x1234);
+			FileSource tmp = team.getChild("." + name + ".tmp");
+			try (OutputStream out = tmp.getOutputStream()) {
+				out.write(bytes(SIMPLE.replace("\r\n", "\n")));
+			}
+			assertTrue(tmp.renameTo(team.getChild(name)));
+			Thread.sleep(1100);
 			r = c.ok("NOOP");
 			assertTrue(r.contains("* 1 EXISTS"), r.toString());
 			r = c.ok("FETCH 1 (UID RFC822.SIZE BODY[TEXT])");
 			assertTrue(r.get(0).startsWith("* 1 FETCH (UID 2 RFC822.SIZE " + SIMPLE.length() + " BODY[TEXT] {14}\r\nHello\r\nWorld\r\n"),
 					"stored with CRLF: " + r.get(0));
 		}
-		try (Pop3 p = new Pop3()) {
-			p.cmd("USER team1");
-			p.cmd("PASS secret");
-			assertEquals("+OK 1 " + SIMPLE.length(), p.cmd("STAT"));
-			p.cmd("QUIT");
-		}
+		assertEquals(1, maildropFiles(team).size(), "still one message for POP3");
 	}
 
 	@Test
