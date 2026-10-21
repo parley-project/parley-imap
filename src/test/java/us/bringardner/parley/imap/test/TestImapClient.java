@@ -81,11 +81,14 @@ public class TestImapClient {
 	@BeforeAll
 	public static void startServer() throws Exception {
 		ServerTestSupport.writeKeystore(new File(KEYSTORE));
-		System.setProperty("ImapServer.KeyStoreName", KEYSTORE);
-		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
-		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
-		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
-		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+		// The server with implicit TLS (testImplicitTls) reads its settings with its own prefix
+		for (String prefix : new String[] {ImapServer.IMAP_PREFIX, ImapServer.IMAPS_PREFIX}) {
+			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
+			System.setProperty(prefix + ".keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
+			System.setProperty(prefix + ".keyStoreType", "PKCS12");
+			System.setProperty(prefix + "." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
+			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+		}
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapclienttest");
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);

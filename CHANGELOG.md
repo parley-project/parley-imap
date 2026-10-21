@@ -1,5 +1,17 @@
 # Changelog
 
+## parley-imap 2.0.0 (unreleased)
+
+### Changed (needs a configuration change)
+
+- **Property names** (Parley 2.0.0; the old names are no longer read): `JImap.*` is `parley.mail.imap.*`
+  (`.autologout`, `.requireTls`, `.appendLimit`, `.defaultMailboxes`, `.secure`, `.port`), and the maildrop
+  root is the shared `parley.mail.root` / `parley.mail.fileSource` (no more falling back to `JPop3.root`).
+  `JImap.properties` is `parley.mail.imap.configFile`.
+- A server's own settings are read with its prefix, `parley.mail.imap` (was `ImapServer`): key store, limits and
+  access control. A server with implicit TLS uses `parley.mail.imaps` (port `parley.mail.imaps.port`, 993).
+- `JImap.loginFailureDelay` is now the server's `loginFailureDelay`: `LOGIN_FAILURE_DELAY_PROP` is gone.
+
 ## parley-imap 1.1.0 (unreleased)
 
 ### Added

@@ -28,33 +28,36 @@ import us.bringardner.parley.mail.store.MailboxRegistry;
  * Mail is shared with Pop3Server: the maildrop root is the same, a user's INBOX
  * is their POP3 maildrop, and the user's other mailboxes are kept under it (see
  * {@link MailStore}). Users come from the access control list
- * ({@code ImapServer.AuthenticationProvider}): READ is needed to log in, WRITE
+ * ({@code parley.mail.imap.authenticationProvider}): READ is needed to log in, WRITE
  * to change anything.
  */
 public class ImapServer extends AbstractMailServer implements IMAP {
 
 
 	public static final String IMAP_NAME = "JImap";
-	public static final String CONFIG_PROP = IMAP_NAME + ".properties";
-	/** The maildrop root; defaults to JPop3.root, so the two servers share mail. */
-	public static final String ROOT_PROP = IMAP_NAME + ".root";
-	public static final String FILE_SOURCE_PROP = IMAP_NAME + ".fileSource";
+	/** The prefix of the properties of an IMAP server (port 143, STARTTLS). */
+	public static final String IMAP_PREFIX = "parley.mail.imap";
+	/** The prefix of the properties of an IMAP server with implicit TLS (port 993). */
+	public static final String IMAPS_PREFIX = "parley.mail.imaps";
+	/** A properties file main loads into the system properties. */
+	public static final String CONFIG_PROP = IMAP_PREFIX + ".configFile";
+	/** The maildrop root, shared with POP3 and SMTP so the servers share mail. */
+	public static final String ROOT_PROP = MAIL_ROOT_PROP;
+	public static final String FILE_SOURCE_PROP = MAIL_FILE_SOURCE_PROP;
 	public static final String DEFAULT_ROOT_WINDOWS = "C:/pop3";
 	public static final String DEFAULT_ROOT = "/pop3";
 
 	/** RFC 9051 section 5.4: at least 30 minutes. */
 	public static final int DEFAULT_AUTOLOGOUT = 30 * 60 * 1000;
-	public static final String AUTOLOGOUT_PROP = IMAP_NAME + ".autologout";
+	public static final String AUTOLOGOUT_PROP = IMAP_PREFIX + ".autologout";
 	public static final int DEFAULT_LOGIN_FAILURE_DELAY = 1000;
-	/** Older name of the delay setting, still read: see {@link #getDefaultLoginFailureDelay()} */
-	public static final String LOGIN_FAILURE_DELAY_PROP = IMAP_NAME + ".loginFailureDelay";
 	/** Refuse LOGIN and AUTHENTICATE until STARTTLS (LOGINDISABLED). */
-	public static final String REQUIRE_TLS_PROP = IMAP_NAME + ".requireTls";
+	public static final String REQUIRE_TLS_PROP = IMAP_PREFIX + ".requireTls";
 	/** The largest message APPEND accepts. */
-	public static final String APPEND_LIMIT_PROP = IMAP_NAME + ".appendLimit";
+	public static final String APPEND_LIMIT_PROP = IMAP_PREFIX + ".appendLimit";
 	public static final long DEFAULT_APPEND_LIMIT = 100L * 1024 * 1024;
 	/** Create Sent, Drafts, Trash, Junk and Archive for a new user. */
-	public static final String DEFAULT_MAILBOXES_PROP = IMAP_NAME + ".defaultMailboxes";
+	public static final String DEFAULT_MAILBOXES_PROP = IMAP_PREFIX + ".defaultMailboxes";
 
 	private volatile long appendLimit = Long.getLong(APPEND_LIMIT_PROP, DEFAULT_APPEND_LIMIT);
 	private volatile boolean createDefaultMailboxes = Boolean
@@ -63,7 +66,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	private final MailboxRegistry registry = MailboxRegistry.get();
 
 	public ImapServer(int port, String name, boolean secure) {
-		super(port, name, "ImapServer", secure);
+		super(port, name, secure ? IMAPS_PREFIX : IMAP_PREFIX, secure);
 		initMe();
 		finishInit();
 	}
@@ -92,8 +95,8 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 
 	public static void main(String[] args) throws Exception {
 		ServerMain.configure("ImapServer", args, CONFIG_PROP);
-		boolean secure = Boolean.parseBoolean(System.getProperty(IMAP_NAME + ".secure", "false"));
-		int port = Integer.getInteger(IMAP_NAME + ".port", secure ? IMAPS_PORT : IMAP_PORT);
+		boolean secure = Boolean.parseBoolean(System.getProperty(IMAP_PREFIX + ".secure", "false"));
+		int port = secure ? Integer.getInteger(IMAPS_PREFIX + ".port", IMAPS_PORT) : Integer.getInteger(IMAP_PREFIX + ".port", IMAP_PORT);
 		ImapServer server = new ImapServer(port, IMAP_NAME, secure);
 		server.start();
 		System.out.println("ImapServer started on port " + port);
@@ -114,7 +117,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 
 		initAutologout(AUTOLOGOUT_PROP, DEFAULT_AUTOLOGOUT);
 		setRequireTls(Boolean.getBoolean(REQUIRE_TLS_PROP));
-		initMaildropRoot(FILE_SOURCE_PROP, "JPop3.fileSource", ROOT_PROP, "JPop3.root", DEFAULT_ROOT, DEFAULT_ROOT_WINDOWS);
+		initMaildropRoot(FILE_SOURCE_PROP, null, ROOT_PROP, null, DEFAULT_ROOT, DEFAULT_ROOT_WINDOWS);
 
 		warnIfNoAccessControl();
 	}
@@ -170,15 +173,6 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	// ------------------------------------------------------------------ settings
-
-	/**
-	 * The shared LoginFailureDelay setting (see AbstractCoreServer) defaults to the older
-	 * {@value #LOGIN_FAILURE_DELAY_PROP} system property, else {@value #DEFAULT_LOGIN_FAILURE_DELAY} ms.
-	 */
-	@Override
-	protected int getDefaultLoginFailureDelay() {
-		return Integer.getInteger(LOGIN_FAILURE_DELAY_PROP, DEFAULT_LOGIN_FAILURE_DELAY);
-	}
 
 	public long getAppendLimit() {
 		return appendLimit;

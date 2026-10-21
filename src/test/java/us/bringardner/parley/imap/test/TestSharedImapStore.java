@@ -35,11 +35,11 @@ public class TestSharedImapStore {
 	public static void start() throws Exception {
 		String keystore = java.nio.file.Files.createTempDirectory("parley-imap-shared").resolve("keystore.p12").toString();
 		ServerTestSupport.writeKeystore(new File(keystore));
-		System.setProperty("ImapServer.KeyStoreName", keystore);
-		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
-		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
-		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
-		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+		System.setProperty("parley.mail.imap.keyStoreName", keystore);
+		System.setProperty("parley.mail.imap.keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
+		System.setProperty("parley.mail.imap.keyStoreType", "PKCS12");
+		System.setProperty("parley.mail.imap." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
+		System.setProperty("parley.mail.imap." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		before = System.getProperty(MailLocks.SHARED_STORE_PROPERTY);
 		System.setProperty(MailLocks.SHARED_STORE_PROPERTY, "cluster");
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapshared");

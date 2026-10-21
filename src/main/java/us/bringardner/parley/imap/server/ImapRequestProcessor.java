@@ -87,7 +87,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		super();
 		setCommandFactory(new ImapCommandFactory());
 		setName("ImapRequestProcessor");
-		setPropertyPrefix("ImapRequestProcessor");
+		setPropertyPrefix("parley.mail.imap.session");
 	}
 
 	public ImapServer getImapServer() {

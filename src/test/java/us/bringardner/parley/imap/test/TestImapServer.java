@@ -59,10 +59,10 @@ public class TestImapServer {
 	@BeforeAll
 	public static void startServer() throws Exception {
 		ServerTestSupport.writeKeystore(new File(KEYSTORE));
-		for (String prefix : new String[] {"ImapServer"}) {
-			System.setProperty(prefix + ".KeyStoreName", KEYSTORE);
-			System.setProperty(prefix + ".KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
-			System.setProperty(prefix + ".KeyStoreType", "PKCS12");
+		for (String prefix : new String[] {"parley.mail.imap"}) {
+			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
+			System.setProperty(prefix + ".keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
+			System.setProperty(prefix + ".keyStoreType", "PKCS12");
 			System.setProperty(prefix + "." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
 			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		}
@@ -922,7 +922,7 @@ public class TestImapServer {
 		}
 	}
 
-	/** The shared MaxLoginAttempts setting */
+	/** The shared maxLoginAttempts setting */
 	@Test
 	public void testMaxLoginAttempts() throws Exception {
 		server.setMaxLoginAttempts(2);
