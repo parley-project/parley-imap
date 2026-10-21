@@ -52,9 +52,10 @@ against the directory (parley-mail's format), and parley-pop3 tests its side.
 ImapServer server = new ImapServer();          // port 143
 server.setMaildropRoot(rootFileSource);        // the same root as Pop3Server
 server.start();
-
-server.deliver("tony", "INBOX", message, null); // local delivery; returns the UID
 ```
+
+Mail is delivered by SMTP, or by your code through the user's parley-mail store (`MailStore.deliver`); IMAP itself
+only adds messages with APPEND, COPY and MOVE.
 
 Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -DJImap.port=1143 -DJImap.root=/var/mail/pop3`
 

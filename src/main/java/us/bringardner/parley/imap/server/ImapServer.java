@@ -169,37 +169,6 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		return store;
 	}
 
-	/**
-	 * Deliver a message to a user's INBOX (or another mailbox), e.g. from an SMTP
-	 * server. Sessions with the mailbox selected see it at once.
-	 *
-	 * @return the new message's UID
-	 */
-	public long deliver(String user, String mailbox, Message message, java.util.Set<String> flags) throws IOException {
-		IAccessControlList acl = getAccessControl();
-		// a list that can't answer throws: the message isn't delivered to a guessed maildrop
-		IPrincipal p = acl == null ? null : acl.findPrincipal(user);
-		MailStore store = new MailStore(p != null ? getInboxDirectory(p) : getInboxDirectory(user), registry);
-		store.init(createDefaultMailboxes);
-		Mailbox m = store.open(mailbox == null ? INBOX : mailbox);
-		try {
-			FileSource dir = message.getWorkDirectory();
-			FileSource tmp = dir.getFileSourceFactory().createTempFile("imap", ".eml", dir);
-			try {
-				try (java.io.OutputStream out = new java.io.BufferedOutputStream(tmp.getOutputStream(), 64 * 1024)) {
-					message.writeTo(out);
-				}
-				try (InputStream in = tmp.getInputStream()) {
-					return m.append(in, flags == null ? java.util.Set.of() : flags, System.currentTimeMillis()).getUid();
-				}
-			} finally {
-				tmp.delete();
-			}
-		} finally {
-			registry.release(m);
-		}
-	}
-
 	// ------------------------------------------------------------------ settings
 
 	/**
