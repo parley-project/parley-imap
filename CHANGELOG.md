@@ -25,6 +25,11 @@
 - Dependencies: parley-mail and parley-net 1.1.0; their tests jars for tests (the shared test users and helpers). No longer parley-pop3, even for
   tests: sharing the maildrop with POP3 is tested against the directory.
 
+### Removed (needs a code change)
+
+- `ImapServer.deliver(user, mailbox, message, flags)`: delivery isn't part of IMAP. Use the user's parley-mail store,
+  `MailStore.deliver(content, junk)` (or `Mailbox.append` for another mailbox and flags).
+
 ## parley-imap 1.0.0 (2026-10-16)
 
 The IMAP server and client of BjlEmail (`us.bringardner:bjl_email` 1.0.0-SNAPSHOT, never released)
