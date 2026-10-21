@@ -22,7 +22,8 @@ Requires Java 11 or later. Depends on `parley-mail` and `parley-net` (which brin
 > parley-imap was split out of `us.bringardner:bjl_email` (BjlEmail). `us.bringardner.net.imap` is now
 > `us.bringardner.parley.imap`. The server's mail store moved to parley-mail
 > (`us.bringardner.parley.mail.store`). Property names that start with a class name change with the
-> package; the `JImap.*` and `ImapServer.*` properties are unchanged.
+> package; the `JImap.*` and `ImapServer.*` properties are unchanged. In 2.0.0 every property was renamed
+> (`parley.mail.imap.*`, `parley.mail.root`): see the CHANGELOG.
 
 ## Build
 
@@ -57,7 +58,7 @@ server.start();
 Mail is delivered by SMTP, or by your code through the user's parley-mail store (`MailStore.deliver`); IMAP itself
 only adds messages with APPEND, COPY and MOVE.
 
-Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -DJImap.port=1143 -DJImap.root=/var/mail/pop3`
+Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -Dparley.mail.imap.port=1143 -Dparley.mail.root=/var/mail/pop3`
 
 ### Protocol support
 
@@ -73,7 +74,7 @@ Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -DJ
 Mail is kept in the `parley-mail` store (`us.bringardner.parley.mail.store`): INBOX is the user's POP3
 maildrop, other mailboxes are directories under `<inbox>/.mailboxes`, and each has a `.imap-index`.
 See the parley-mail README for the layout. New users get Sent, Drafts, Trash, Junk and Archive;
-turn this off with `JImap.defaultMailboxes=false`.
+turn this off with `parley.mail.imap.defaultMailboxes=false`.
 
 Several servers (IMAP, POP3, SMTP, in any number of JVMs) can share a store when
 `parley.mail.sharedStore` allows it (`off`, the default, `host` or `cluster`). A session sees other
@@ -83,22 +84,23 @@ select it again. See "Several servers on one store" in the parley-mail README.
 
 ### Users and permissions
 
-Users come from the access control list, set up as for Pop3Server with the `ImapServer.AuthenticationProvider` property (e.g. `FileBasedAcl` with `ImapServer.userFile`). READ is needed to log in. WRITE is needed for any change: without it, SELECT opens mailboxes read-only, and APPEND, CREATE, DELETE and RENAME get `NO [NOPERM]`. User names and passwords are prepared with SASLprep (RFC 4013), as for POP3.
+Users come from the access control list, set up as for Pop3Server with the `parley.mail.imap.authenticationProvider` property (e.g. `FileBasedAcl` with `parley.mail.imap.userFile`). READ is needed to log in. WRITE is needed for any change: without it, SELECT opens mailboxes read-only, and APPEND, CREATE, DELETE and RENAME get `NO [NOPERM]`. User names and passwords are prepared with SASLprep (RFC 4013), as for POP3.
 
 ### Configuration
 
 | Property | Default | Meaning |
 |---|---|---|
-| `JImap.port` | 143 (993 if secure) | Port (used by `ImapServer.main`) |
-| `JImap.secure` | false | Implicit TLS |
-| `JImap.root` | `JPop3.root`, else `/pop3` (`C:/pop3` on Windows) | Maildrop root, shared with POP3 |
-| `JImap.fileSource` | `JPop3.fileSource`, else the default factory | FileSource factory for the root |
-| `JImap.autologout` | 1800000 ms | Idle sessions get `* BYE` and are closed. RFC 9051 requires at least 30 minutes. `setAutologout()` |
-| `JImap.loginFailureDelay` | 1000 ms | Delay before replying to a failed login. The connection is closed after 3 failures. `setLoginFailureDelay()` |
-| `JImap.requireTls` | false | Advertise LOGINDISABLED and refuse LOGIN and AUTHENTICATE until STARTTLS. `setRequireTls()` |
-| `JImap.appendLimit` | 104857600 | Largest message APPEND accepts; larger ones get `NO [TOOBIG]`. `setAppendLimit()` |
-| `JImap.defaultMailboxes` | true | Create the special-use mailboxes for new users |
-| `ImapServer.KeyStoreName`, `ImapServer.KeyStorePassword`, `ImapServer.KeyStoreType` | none | Key store for STARTTLS and implicit TLS. STARTTLS is offered only when one is configured. |
+| `parley.mail.imap.port` | 143 | Port (used by `ImapServer.main`) |
+| `parley.mail.imap.secure` | false | `main` starts a server with implicit TLS, on `parley.mail.imaps.port` (993) |
+| `parley.mail.root` | `/pop3` (`C:/pop3` on Windows) | Maildrop root, shared with POP3 and SMTP |
+| `parley.mail.fileSource` | the default factory | FileSource factory for the root |
+| `parley.mail.imap.autologout` | 1800000 ms | Idle sessions get `* BYE` and are closed. RFC 9051 requires at least 30 minutes. `setAutologout()` |
+| `parley.mail.imap.loginFailureDelay` | 1000 ms | Delay before replying to a failed login. The connection is closed after 3 failures. `setLoginFailureDelay()` |
+| `parley.mail.imap.requireTls` | false | Advertise LOGINDISABLED and refuse LOGIN and AUTHENTICATE until STARTTLS. `setRequireTls()` |
+| `parley.mail.imap.appendLimit` | 104857600 | Largest message APPEND accepts; larger ones get `NO [TOOBIG]`. `setAppendLimit()` |
+| `parley.mail.imap.defaultMailboxes` | true | Create the special-use mailboxes for new users |
+| `parley.mail.imap.keyStoreName`, `parley.mail.imap.keyStorePassword`, `parley.mail.imap.keyStoreType` | none | Key store for STARTTLS and implicit TLS. STARTTLS is offered only when one is configured. |
+| `parley.mail.imap.*` | | The listener's own settings use its prefix: the key store, the limits of parley-core's `AbstractCoreServer` (`maxConnections`, `maxLoginAttempts`, ...) and the access control list (`authenticationProvider`, `userFile`). A server with implicit TLS uses `parley.mail.imaps`. |
 
 ### Internationalized mail
 
