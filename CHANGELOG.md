@@ -22,7 +22,7 @@
 
 - Unsaved flag changes are saved when the server stops, after the sessions end and before the store claim is
   given up (`releasingStore()`), so the store's locks still work.
-- Dependencies: parley-mail and parley-net 1.1.0; parley-net's tests jar for tests. No longer parley-pop3, even for
+- Dependencies: parley-mail and parley-net 1.1.0; their tests jars for tests (the shared test users and helpers). No longer parley-pop3, even for
   tests: sharing the maildrop with POP3 is tested against the directory.
 
 ## parley-imap 1.0.0 (2026-10-16)

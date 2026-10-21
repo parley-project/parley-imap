@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static us.bringardner.parley.mail.test.MailTestSupport.ACL_FILE;
+import static us.bringardner.parley.mail.test.MailTestSupport.deleteAll;
+import static us.bringardner.parley.mail.test.MailTestSupport.scratchFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -69,15 +72,6 @@ public class TestImapClient {
 
 	private static final String KEYSTORE = scratchFile("imapclientkeystore.p12");
 
-	/** A file in this run's own folder under the temp directory, so tests don't depend on target/ or the working directory. */
-	private static String scratchFile(String name) {
-		try {
-			return java.nio.file.Files.createTempDirectory("parley-imap-tests").resolve(name).toString();
-		} catch (java.io.IOException e) {
-			throw new java.io.UncheckedIOException(e);
-		}
-	}
-
 	private static ImapServer server;
 	private static ImapServer tlsServer;
 	private static FileSource root;
@@ -90,7 +84,7 @@ public class TestImapClient {
 		System.setProperty("ImapServer.KeyStoreName", KEYSTORE);
 		System.setProperty("ImapServer.KeyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("ImapServer.KeyStoreType", "PKCS12");
-		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, "Pop3TestAcl.txt");
+		System.setProperty("ImapServer." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
 		System.setProperty("ImapServer." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapclienttest");
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
@@ -112,15 +106,6 @@ public class TestImapClient {
 		if (root != null) {
 			deleteAll(root);
 		}
-	}
-
-	private static void deleteAll(FileSource f) throws IOException {
-		if (f.isDirectory()) {
-			for (FileSource kid : f.listFiles()) {
-				deleteAll(kid);
-			}
-		}
-		f.delete();
 	}
 
 	private static ImapClientConfig config() {
