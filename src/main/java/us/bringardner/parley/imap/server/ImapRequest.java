@@ -118,14 +118,12 @@ public class ImapRequest implements IRequestContext {
 	// ------------------------------------------------------------------ IRequestContext
 
 	@Override
-	@Deprecated
-	public String getSeperator() {
+	public String getSeparator() {
 		return " ";
 	}
 
 	@Override
-	@Deprecated
-	public void setSeperator(String seperator) {
+	public void setSeparator(String separator) {
 		// fixed: IMAP uses exactly one space
 	}
 

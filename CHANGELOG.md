@@ -2,6 +2,10 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Removed (needs a code change)
+
+- `ImapRequest.get/setSeperator`: it implements parley-net 2.0.0's `get/setSeparator`.
+
 ### Changed (needs a configuration change)
 
 - **Property names** (Parley 2.0.0; the old names are no longer read): `JImap.*` is `parley.mail.imap.*`
