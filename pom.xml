@@ -13,7 +13,6 @@
 	</parent>
 
 	<artifactId>parley-imap</artifactId>
-	<version>2.0.0-SNAPSHOT</version>
 	<name>Parley IMAP</name>
 	<description>An IMAP server (IMAP4rev2, RFC 9051, also speaking IMAP4rev1) and an IMAP client library
 		with a command-line program, built on parley-net and serving the parley-mail store.
@@ -84,20 +83,20 @@
 		<dependency>
 			<groupId>us.bringardner.parley</groupId>
 			<artifactId>parley-mail</artifactId>
-			<version>2.0.0-SNAPSHOT</version>
+			<version>${project.version}</version>
 		</dependency>
 		<!-- Server, client, sessions, TLS, authentication -->
 		<dependency>
 			<groupId>us.bringardner.parley</groupId>
 			<artifactId>parley-net</artifactId>
-			<version>2.0.0-SNAPSHOT</version>
+			<version>${project.version}</version>
 		</dependency>
 
 		<!-- Tests only: what the mail protocols' tests share (MailTestSupport, MailTestAcl.txt), in parley-mail's tests jar -->
 		<dependency>
 			<groupId>us.bringardner.parley</groupId>
 			<artifactId>parley-mail</artifactId>
-			<version>2.0.0-SNAPSHOT</version>
+			<version>${project.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
@@ -106,7 +105,7 @@
 		<dependency>
 			<groupId>us.bringardner.parley</groupId>
 			<artifactId>parley-net</artifactId>
-			<version>2.0.0-SNAPSHOT</version>
+			<version>${project.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
