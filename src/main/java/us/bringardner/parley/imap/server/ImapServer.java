@@ -93,12 +93,12 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		}
 	}
 
+	/**
+	 * Run IMAP (and IMAP with implicit TLS when parley.mail.imaps.port is set) until the process is
+	 * stopped; see parley-net's ServerMain.launch.
+	 */
 	public static void main(String[] args) throws Exception {
-		ServerMain.run("ImapServer", args, CONFIG_PROP, "parley-imap.properties", () -> {
-			boolean secure = Boolean.parseBoolean(System.getProperty(IMAP_PREFIX + ".secure", "false"));
-			int port = secure ? Integer.getInteger(IMAPS_PREFIX + ".port", IMAPS_PORT) : Integer.getInteger(IMAP_PREFIX + ".port", IMAP_PORT);
-			return java.util.Collections.singletonList(ServerMain.service(new ImapServer(port, IMAP_NAME, secure), "ImapServer"));
-		});
+		ServerMain.launch("ImapServer", args, "imap", "imaps");
 	}
 
 	private void initMe() {

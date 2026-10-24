@@ -60,6 +60,12 @@ only adds messages with APPEND, COPY and MOVE.
 
 Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -Dparley.mail.imap.port=1143 -Dparley.mail.root=/var/mail/pop3`
 
+`ImapServer.main` runs `imap` and, when `parley.mail.imaps.port` is set, `imaps` (with implicit TLS), with
+parley-net's `ServerMain.launch`: settings from `parley-mail.properties` then `parley-imap.properties` in
+the settings folder, the JVM's `-D` options and the command line; a JMX bean per server. To run IMAP
+with other servers in one process, use the providers `imap` and `imaps` (`ImapProviders`) with
+parley-net's launcher; see parley-mail's README.
+
 ### Protocol support
 
 - **IMAP4rev2 (RFC 9051)** for clients that send `ENABLE IMAP4rev2`, and **IMAP4rev1 (RFC 3501)** for the rest. A rev1 session gets `* n RECENT`, `[UNSEEN n]`, the `SEARCH` response, `LSUB` and `CHECK`. A rev2 session gets `ESEARCH`, `LIST` in `SELECT` and `[CLOSED]` responses.
@@ -91,7 +97,8 @@ Users come from the access control list, set up as for Pop3Server with the `parl
 | Property | Default | Meaning |
 |---|---|---|
 | `parley.mail.imap.port` | 143 | Port (used by `ImapServer.main`) |
-| `parley.mail.imap.secure` | false | `main` starts a server with implicit TLS, on `parley.mail.imaps.port` (993) |
+| `parley.mail.imaps.port` | off | Port of IMAP with implicit TLS (`imaps`); set it (993) to turn it on |
+| `parley.mail.imap.secure` | false | The older way: `main` runs only IMAP with implicit TLS, on `parley.mail.imaps.port` (993) |
 | `parley.mail.root` | `/pop3` (`C:/pop3` on Windows) | Maildrop root, shared with POP3 and SMTP |
 | `parley.mail.fileSource` | the default factory | FileSource factory for the root |
 | `parley.mail.imap.autologout` | 1800000 ms | Idle sessions get `* BYE` and are closed. RFC 9051 requires at least 30 minutes. `setAutologout()` |
