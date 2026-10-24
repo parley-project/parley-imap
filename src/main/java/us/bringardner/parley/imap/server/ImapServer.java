@@ -94,12 +94,11 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ServerMain.configure("ImapServer", args, CONFIG_PROP);
-		boolean secure = Boolean.parseBoolean(System.getProperty(IMAP_PREFIX + ".secure", "false"));
-		int port = secure ? Integer.getInteger(IMAPS_PREFIX + ".port", IMAPS_PORT) : Integer.getInteger(IMAP_PREFIX + ".port", IMAP_PORT);
-		ImapServer server = new ImapServer(port, IMAP_NAME, secure);
-		server.start();
-		System.out.println("ImapServer started on port " + port);
+		ServerMain.run("ImapServer", args, CONFIG_PROP, "parley-imap.properties", () -> {
+			boolean secure = Boolean.parseBoolean(System.getProperty(IMAP_PREFIX + ".secure", "false"));
+			int port = secure ? Integer.getInteger(IMAPS_PREFIX + ".port", IMAPS_PORT) : Integer.getInteger(IMAP_PREFIX + ".port", IMAP_PORT);
+			return java.util.Collections.singletonList(ServerMain.service(new ImapServer(port, IMAP_NAME, secure), "ImapServer"));
+		});
 	}
 
 	private void initMe() {

@@ -2,6 +2,12 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed
+
+- **`ImapServer.main` runs the server as a service** with parley-net's `ServerMain.run`: settings from the command
+  line (which wins) and `parley-imap.properties` in Parley's administrator folder (`/etc/parley`, or the file the server's
+  `configFile` property names); it stops on SIGTERM; a failed start now exits with 1.
+
 ### Removed (needs a code change)
 
 - `ImapRequest.get/setSeperator`: it implements parley-net 2.0.0's `get/setSeparator`.
