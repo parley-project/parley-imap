@@ -2,6 +2,14 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Added
+
+- **`ImapProviders`**: parley-net `ServerProvider`s `imap` and `imaps` (implicit TLS), so IMAP runs alone or with other
+  servers in one process (parley-net's `ServerMain`), and is managed with JMX. `ImapServer.main` runs them with
+  `ServerMain.launch`: settings from `parley-mail.properties`, then `parley-imap.properties`; `imaps` runs when
+  `parley.mail.imaps.port` is set. Users and the TLS key store can come from the suite's `parley.mail.users` and
+  `parley.mail.tls.*` (parley-mail).
+
 ### Changed
 
 - **`ImapServer.main` runs the server as a service** with parley-net's `ServerMain.run`: settings from the command
