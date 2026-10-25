@@ -70,7 +70,8 @@ public class TestImapProviders {
 	}
 
 	private void write(String name, String... lines) throws Exception {
-		Files.write(new File(dir, name).toPath(), (String.join("\n", lines) + "\n").getBytes(StandardCharsets.UTF_8));
+		// (a .properties file reads \ as an escape: the paths in it have / on Windows)
+		Files.write(new File(dir, name).toPath(), (String.join("\n", lines).replace('\\', '/') + "\n").getBytes(StandardCharsets.UTF_8));
 	}
 
 	@Test
