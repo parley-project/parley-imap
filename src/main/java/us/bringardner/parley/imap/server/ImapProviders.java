@@ -1,5 +1,6 @@
 package us.bringardner.parley.imap.server;
 
+import us.bringardner.parley.mail.server.AbstractMailServer;
 import us.bringardner.parley.mail.server.MailServerProvider;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.net.server.ServerContext;
@@ -34,8 +35,8 @@ public final class ImapProviders {
 		}
 
 		@Override
-		public ServerMain.Service create(ServerContext context) {
-			return ServerMain.service(new ImapServer(port(), ImapServer.IMAP_NAME, false), "IMAP server");
+		public ServerMain.Service create(ServerContext context) throws Exception {
+			return ServerMain.service(AbstractMailServer.makeIn(context, () -> new ImapServer(port(), ImapServer.IMAP_NAME, false)), "IMAP server");
 		}
 	}
 
@@ -51,8 +52,8 @@ public final class ImapProviders {
 		}
 
 		@Override
-		public ServerMain.Service create(ServerContext context) {
-			return ServerMain.service(new ImapServer(port(), ImapServer.IMAP_NAME, true), "IMAP server (implicit TLS)");
+		public ServerMain.Service create(ServerContext context) throws Exception {
+			return ServerMain.service(AbstractMailServer.makeIn(context, () -> new ImapServer(port(), ImapServer.IMAP_NAME, true)), "IMAP server (implicit TLS)");
 		}
 	}
 }
