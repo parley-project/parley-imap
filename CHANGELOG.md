@@ -2,6 +2,12 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-10-26: each server alone, shared assets carry their own settings)
+
+- **Each IMAP server reads its own settings under its own prefix**: `autologout`, `requireTls`, `appendLimit` and
+  `defaultMailboxes` are `parley.mail.imaps.*` for IMAPS (they used to be read as `parley.mail.imap.*` for both).
+  The providers make each server from its own configuration.
+
 ### Added
 
 - **`ImapProviders`**: parley-net `ServerProvider`s `imap` and `imaps` (implicit TLS), so IMAP runs alone or with other
