@@ -26,7 +26,6 @@ import us.bringardner.parley.net.ServerTestSupport;
 /** An IMAP server on a store shared with another server ({@code parley.mail.sharedStore=cluster}). */
 public class TestSharedImapStore {
 
-	private static String before;
 	private static ImapServer server;
 	private static FileSource root;
 	private static AnotherServer other;
@@ -40,9 +39,8 @@ public class TestSharedImapStore {
 		System.setProperty("parley.mail.imap.keyStoreType", "PKCS12");
 		System.setProperty("parley.mail.imap." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
 		System.setProperty("parley.mail.imap." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
-		before = System.getProperty(MailLocks.SHARED_STORE_PROPERTY);
-		System.setProperty(MailLocks.SHARED_STORE_PROPERTY, "cluster");
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapshared");
+		MailLocks.writeStoreSettings(root, us.bringardner.parley.net.lock.Sharing.CLUSTER); // the store's own settings
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
@@ -58,11 +56,6 @@ public class TestSharedImapStore {
 		}
 		if (other != null) {
 			other.close();
-		}
-		if (before == null) {
-			System.clearProperty(MailLocks.SHARED_STORE_PROPERTY);
-		} else {
-			System.setProperty(MailLocks.SHARED_STORE_PROPERTY, before);
 		}
 	}
 

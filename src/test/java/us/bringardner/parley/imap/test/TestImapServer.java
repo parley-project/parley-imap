@@ -67,6 +67,7 @@ public class TestImapServer {
 			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		}
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imaptest");
+		us.bringardner.parley.mail.store.MailLocks.writeStoreSettings(root, us.bringardner.parley.net.lock.Sharing.OFF);
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
