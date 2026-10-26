@@ -90,6 +90,8 @@ public class TestImapClient {
 			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
 		}
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapclienttest");
+		// two servers use it (IMAP and IMAPS): the store says it is shared
+		us.bringardner.parley.mail.store.MailLocks.writeStoreSettings(root, us.bringardner.parley.net.lock.Sharing.HOST);
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);

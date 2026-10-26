@@ -83,6 +83,8 @@ public class TestImapProviders {
 	public void runsWithTheSuiteSettings() throws Exception {
 		int port = freePort();
 		File mail = new File(dir, "mail");
+		us.bringardner.parley.mail.store.MailLocks.writeStoreSettings(us.bringardner.parley.files.FileSourceFactory.getDefaultFactory().createFileSource(mail.getPath()),
+				us.bringardner.parley.net.lock.Sharing.OFF); // made by an administrator
 		write("users.txt", "tony , secret , READ|WRITE");
 		write("parley-mail.properties", "parley.mail.root=" + mail.getPath(), "parley.mail.users=" + new File(dir, "users.txt").getPath(),
 				"parley.mail.imap.port=1");
@@ -111,10 +113,13 @@ public class TestImapProviders {
 
 	@Test
 	public void legacySecureTurnsOnImapsOnly() throws Exception {
-		System.setProperty("parley.mail.imap.secure", "true");
+		java.util.Properties c = new java.util.Properties();
+		c.setProperty("parley.mail.imap.secure", "true");
 		us.bringardner.parley.net.server.ServerProvider imap = ServerLauncher.providers().get("imap");
 		us.bringardner.parley.net.server.ServerProvider imaps = ServerLauncher.providers().get("imaps");
-		assertTrue(!imap.enabled());
-		assertTrue(imaps.enabled());
+		assertTrue(!imap.enabled(c));
+		assertTrue(imaps.enabled(c));
+		assertTrue(imap.enabled(new java.util.Properties()));
+		assertTrue(!imaps.enabled(new java.util.Properties()));
 	}
 }

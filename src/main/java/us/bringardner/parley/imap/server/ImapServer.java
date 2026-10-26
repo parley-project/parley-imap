@@ -39,7 +39,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	public static final String IMAP_PREFIX = "parley.mail.imap";
 	/** The prefix of the properties of an IMAP server with implicit TLS (port 993). */
 	public static final String IMAPS_PREFIX = "parley.mail.imaps";
-	/** A properties file main loads into the system properties. */
+	/** A settings file for the server's configuration (see parley-net's ServerLauncher). */
 	public static final String CONFIG_PROP = IMAP_PREFIX + ".configFile";
 	/** The maildrop root, shared with POP3 and SMTP so the servers share mail. */
 	public static final String ROOT_PROP = MAIL_ROOT_PROP;
@@ -49,19 +49,28 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 
 	/** RFC 9051 section 5.4: at least 30 minutes. */
 	public static final int DEFAULT_AUTOLOGOUT = 30 * 60 * 1000;
-	public static final String AUTOLOGOUT_PROP = IMAP_PREFIX + ".autologout";
+	/** A server's idle time setting, after its prefix ({@value #IMAP_PREFIX} or {@value #IMAPS_PREFIX}) */
+	public static final String AUTOLOGOUT = "autologout";
+	/** The IMAP (port 143) server's {@link #AUTOLOGOUT} */
+	public static final String AUTOLOGOUT_PROP = IMAP_PREFIX + "." + AUTOLOGOUT;
 	public static final int DEFAULT_LOGIN_FAILURE_DELAY = 1000;
-	/** Refuse LOGIN and AUTHENTICATE until STARTTLS (LOGINDISABLED). */
-	public static final String REQUIRE_TLS_PROP = IMAP_PREFIX + ".requireTls";
-	/** The largest message APPEND accepts. */
-	public static final String APPEND_LIMIT_PROP = IMAP_PREFIX + ".appendLimit";
+	/** Refuse LOGIN and AUTHENTICATE until STARTTLS (LOGINDISABLED); after the server's prefix. */
+	public static final String REQUIRE_TLS = "requireTls";
+	/** The IMAP (port 143) server's {@link #REQUIRE_TLS} */
+	public static final String REQUIRE_TLS_PROP = IMAP_PREFIX + "." + REQUIRE_TLS;
+	/** The largest message APPEND accepts; after the server's prefix. */
+	public static final String APPEND_LIMIT = "appendLimit";
+	/** The IMAP (port 143) server's {@link #APPEND_LIMIT} */
+	public static final String APPEND_LIMIT_PROP = IMAP_PREFIX + "." + APPEND_LIMIT;
 	public static final long DEFAULT_APPEND_LIMIT = 100L * 1024 * 1024;
-	/** Create Sent, Drafts, Trash, Junk and Archive for a new user. */
-	public static final String DEFAULT_MAILBOXES_PROP = IMAP_PREFIX + ".defaultMailboxes";
+	/** Create Sent, Drafts, Trash, Junk and Archive for a new user; after the server's prefix. */
+	public static final String DEFAULT_MAILBOXES = "defaultMailboxes";
+	/** The IMAP (port 143) server's {@link #DEFAULT_MAILBOXES} */
+	public static final String DEFAULT_MAILBOXES_PROP = IMAP_PREFIX + "." + DEFAULT_MAILBOXES;
 
-	private volatile long appendLimit = Long.getLong(APPEND_LIMIT_PROP, DEFAULT_APPEND_LIMIT);
-	private volatile boolean createDefaultMailboxes = Boolean
-			.parseBoolean(System.getProperty(DEFAULT_MAILBOXES_PROP, "true"));
+	// (read from this server's own settings, under its own prefix)
+	private volatile long appendLimit = longSetting(APPEND_LIMIT, DEFAULT_APPEND_LIMIT);
+	private volatile boolean createDefaultMailboxes = getBooleanProperty(propertyName(DEFAULT_MAILBOXES), true);
 
 	private final MailboxRegistry registry = MailboxRegistry.get();
 
@@ -74,6 +83,20 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	@Override
 	protected String getRootProperty() {
 		return ROOT_PROP;
+	}
+
+	/** A whole-number setting of this server (after its prefix), or the default when it isn't set or isn't a number */
+	private long longSetting(String name, long defaultValue) {
+		String v = getProperty(propertyName(name));
+		if (v == null || v.trim().isEmpty()) {
+			return defaultValue;
+		}
+		try {
+			return Long.parseLong(v.trim());
+		} catch (NumberFormatException e) {
+			logError("Not a number: " + propertyName(name) + "=" + v);
+			return defaultValue;
+		}
 	}
 
 	public ImapServer() {
@@ -114,8 +137,8 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		// sessions read the socket themselves and do their own autologout
 		setMaxIdleConnection(Long.MAX_VALUE / 2);
 
-		initAutologout(AUTOLOGOUT_PROP, DEFAULT_AUTOLOGOUT);
-		setRequireTls(Boolean.getBoolean(REQUIRE_TLS_PROP));
+		initAutologout(propertyName(AUTOLOGOUT), DEFAULT_AUTOLOGOUT);
+		setRequireTls(getBooleanProperty(propertyName(REQUIRE_TLS), false));
 		initMaildropRoot(FILE_SOURCE_PROP, null, ROOT_PROP, null, DEFAULT_ROOT, DEFAULT_ROOT_WINDOWS);
 
 		warnIfNoAccessControl();
