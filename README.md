@@ -82,8 +82,9 @@ maildrop, other mailboxes are directories under `<inbox>/.mailboxes`, and each h
 See the parley-mail README for the layout. New users get Sent, Drafts, Trash, Junk and Archive;
 turn this off with `parley.mail.imap.defaultMailboxes=false`.
 
-Several servers (IMAP, POP3, SMTP, in any number of JVMs) can share a store when
-`parley.mail.sharedStore` allows it (`off`, the default, `host` or `cluster`). A session sees other
+Several servers (IMAP, POP3, SMTP, in one JVM or any number of them) can share a store when the
+store's own settings allow it (`sharing=host` or `cluster` in `.parley-store.properties`; `off` is one
+server at a time). A session sees other
 servers' changes at its next NOOP, IDLE check or command, within a second. If another server deletes
 and recreates the selected mailbox (a new UIDVALIDITY), the session gets `OK [CLOSED]` and must
 select it again. See "Several servers on one store" in the parley-mail README.
@@ -99,7 +100,7 @@ Users come from the access control list, set up as for Pop3Server with the `parl
 | `parley.mail.imap.port` | 143 | Port (used by `ImapServer.main`) |
 | `parley.mail.imaps.port` | off | Port of IMAP with implicit TLS (`imaps`); set it (993) to turn it on |
 | `parley.mail.imap.secure` | false | The older way: `main` runs only IMAP with implicit TLS, on `parley.mail.imaps.port` (993) |
-| `parley.mail.root` | `/pop3` (`C:/pop3` on Windows) | Maildrop root, shared with POP3 and SMTP |
+| `parley.mail.root` | (required) | Maildrop root, shared with POP3 and SMTP; the store has its own settings (see parley-mail) |
 | `parley.mail.fileSource` | the default factory | FileSource factory for the root |
 | `parley.mail.imap.autologout` | 1800000 ms | Idle sessions get `* BYE` and are closed. RFC 9051 requires at least 30 minutes. `setAutologout()` |
 | `parley.mail.imap.loginFailureDelay` | 1000 ms | Delay before replying to a failed login. The connection is closed after 3 failures. `setLoginFailureDelay()` |
