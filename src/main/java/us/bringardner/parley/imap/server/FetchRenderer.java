@@ -306,9 +306,29 @@ public final class FetchRenderer {
 
 	// ------------------------------------------------------------------ writing
 
-	/** A piece of a FETCH response, prepared before anything is written. */
+	/**
+	 * A piece of a FETCH response, prepared before anything is written: a literal's stream is
+	 * open before the response starts, and closed with the piece.
+	 */
 	private interface Piece {
 		void write(ImapOutput out) throws IOException;
+
+		default void close() {
+		}
+	}
+
+	/**
+	 * The message's file is gone (another server, a POP3 session or a delivery agent removed it
+	 * after the session last looked). Thrown before anything of the message's response is
+	 * written, so the command can go on with the other messages.
+	 */
+	public static final class MessageGoneException extends IOException {
+
+		private static final long serialVersionUID = 1L;
+
+		MessageGoneException(MessageInfo info, IOException cause) {
+			super("Message " + info.getUid() + " is gone", cause);
+		}
 	}
 
 	@FunctionalInterface
@@ -318,17 +338,16 @@ public final class FetchRenderer {
 
 	/**
 	 * Write the FETCH response for one message. Everything that can fail (an
-	 * unknown transfer encoding, an unreadable file) is checked before the
-	 * response starts.
+	 * unknown transfer encoding, an unreadable file) is checked, and every stream
+	 * the response reads is opened, before the response starts.
 	 *
 	 * @param addUid  include UID (UID FETCH)
+	 * @throws MessageGoneException the message's file is gone; nothing was written
 	 */
 	static void write(ImapRequestProcessor p, int msn, MessageInfo info, Mailbox mb, List<Att> atts, boolean addUid,
 			boolean addFlags) throws IOException {
 		boolean utf8 = p.isUtf8();
 		boolean rev2 = p.isRev2();
-		FileSource file = !utf8 && info.isUtf8() ? mb.surrogate(info) : info.getFile();
-		long size = file == info.getFile() ? info.getSize() : file.length();
 		List<Piece> pieces = new ArrayList<>();
 		boolean hasUid = false;
 		boolean hasFlags = false;
@@ -341,14 +360,23 @@ public final class FetchRenderer {
 		}
 		Message msg = null;
 		try {
-			for (Att a : atts) {
-				if (a.needsMessage() && msg == null) {
-					msg = Message.parse(file);
+			try {
+				FileSource file = !utf8 && info.isUtf8() ? mb.surrogate(info) : info.getFile();
+				long size = file == info.getFile() ? info.getSize() : file.length();
+				for (Att a : atts) {
+					if (a.needsMessage() && msg == null) {
+						msg = Message.parse(file);
+					}
+					pieces.add(piece(p, a, info, mb, file, size, msg, utf8, rev2));
 				}
-				pieces.add(piece(p, a, info, mb, file, size, msg, utf8, rev2));
-			}
-			if (addFlags && !hasFlags) {
-				pieces.add(piece(p, new Att(Kind.FLAGS), info, mb, file, size, msg, utf8, rev2));
+				if (addFlags && !hasFlags) {
+					pieces.add(piece(p, new Att(Kind.FLAGS), info, mb, file, size, msg, utf8, rev2));
+				}
+			} catch (IOException e) {
+				if (gone(info)) {
+					throw new MessageGoneException(info, e);
+				}
+				throw e;
 			}
 			ImapOutput out = p.getOutput();
 			out.write("* " + msn + " FETCH (");
@@ -362,9 +390,21 @@ public final class FetchRenderer {
 			}
 			out.write(")").crlf();
 		} finally {
+			for (Piece piece : pieces) {
+				piece.close();
+			}
 			if (msg != null) {
 				msg.close();
 			}
+		}
+	}
+
+	/** Whether a message's file is gone (an error checking counts as not gone). */
+	private static boolean gone(MessageInfo info) {
+		try {
+			return !info.getFile().exists();
+		} catch (IOException | RuntimeException e) {
+			return false;
 		}
 	}
 
@@ -500,17 +540,7 @@ public final class FetchRenderer {
 			long total = n;
 			return out -> out.write(name + " " + total);
 		}
-		boolean literal8 = nul;
-		long total = n;
-		Opener o = opener;
-		return out -> {
-			long[] r = partial(a, total);
-			out.write(name + " ");
-			try (InputStream in = o.open()) {
-				skipFully(in, r[0]);
-				out.literal(r[1], in, literal8);
-			}
-		};
+		return literal(name, n, opener, a, nul);
 	}
 
 	private static Piece empty(String name) {
@@ -526,15 +556,31 @@ public final class FetchRenderer {
 		return new long[] {off, len};
 	}
 
-	private static Piece literal(String name, long length, Opener opener, Att a) {
-		return out -> {
-			long[] r = partial(a, length);
-			out.write(name + " ");
-			try (InputStream in = opener.open()) {
+	private static Piece literal(String name, long length, Opener opener, Att a) throws IOException {
+		return literal(name, length, opener, a, false);
+	}
+
+	/** A literal (literal8 for BINARY with NUL); its stream is opened now, before the response starts. */
+	private static Piece literal(String name, long length, Opener opener, Att a, boolean literal8) throws IOException {
+		long[] r = partial(a, length);
+		InputStream in = opener.open();
+		return new Piece() {
+			@Override
+			public void write(ImapOutput out) throws IOException {
+				out.write(name + " ");
 				if (r[0] > 0) {
 					skipFully(in, r[0]);
 				}
-				out.literal(r[1], in, false);
+				out.literal(r[1], in, literal8);
+			}
+
+			@Override
+			public void close() {
+				try {
+					in.close();
+				} catch (IOException e) {
+					// nothing to do
+				}
 			}
 		};
 	}
