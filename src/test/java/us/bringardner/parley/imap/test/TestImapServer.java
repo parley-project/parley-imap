@@ -11,12 +11,10 @@ import static us.bringardner.parley.mail.test.MailTestSupport.downAcl;
 import static us.bringardner.parley.mail.test.MailTestSupport.scramAcl;
 import static us.bringardner.parley.mail.test.MailTestSupport.scratchFile;
 
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.ZonedDateTime;
