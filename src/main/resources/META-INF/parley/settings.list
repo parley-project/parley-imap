@@ -1,0 +1,10 @@
+# The settings parley-imap reads, for the mail servers' start-up check
+# (format: parley-net's KnownSettings). Add a name here when code here starts reading it.
+
+prefix parley.mail.imap
+prefix parley.mail.imaps
+
+parley.mail.imap.configFile
+parley.mail.{imap,imaps}.requireTls
+parley.mail.{imap,imaps}.defaultMailboxes
+parley.mail.{imap,imaps}.appendLimit
