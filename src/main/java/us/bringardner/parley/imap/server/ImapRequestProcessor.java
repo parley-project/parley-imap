@@ -27,6 +27,7 @@ import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand.State;
 import us.bringardner.parley.mail.store.MailStore;
 import us.bringardner.parley.mail.store.Mailbox;
+import us.bringardner.parley.mail.store.MailboxAcl;
 import us.bringardner.parley.mail.store.MailboxView;
 import us.bringardner.parley.io.IoUtils;
 
@@ -79,6 +80,10 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	private transient ImapCommandReader reader;
 	private transient MailStore store;
 	private transient MailboxView view;
+	/** The rights on the selected mailbox, as they were when it was selected (RFC 4314 section 5.2 lets them be kept). */
+	private String selectedRights = "";
+	/** Other users' stores this session has opened, by user name (null: no such user). */
+	private transient Map<String, MailStore> otherStores = new java.util.HashMap<>();
 	private String selectedName;
 	private List<Long> savedSearch;
 	private volatile boolean idling;
@@ -407,6 +412,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			.add("LITERAL+").add("ENABLE").add("IDLE").add("NAMESPACE").add("UNSELECT").add("UIDPLUS")
 			.add("ESEARCH").add("SEARCHRES").add("LIST-EXTENDED").add("LIST-STATUS").add("MOVE")
 			.add("SPECIAL-USE").add("CHILDREN").add("BINARY").add("STATUS=SIZE")
+			.add("ACL").add("RIGHTS=" + MailboxAcl.NEW_RIGHTS)
 			.add(CAP_UTF8_ACCEPT);
 
 	/** The capability list as it appears after "CAPABILITY": names separated by spaces. */
@@ -589,11 +595,186 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		return selectedName;
 	}
 
+	// ------------------------------------------------------------------ namespaces and rights (RFC 2342, RFC 4314)
+
+	/** The Other Users namespace's prefix, without its delimiter. */
+	public static final String OTHER_USERS = "Other Users";
+
+	/**
+	 * A mailbox name as the client gave it, and where it is: the store it is in and its name
+	 * there. In the Other Users namespace, {@code Other Users/bob@bringardner.us/Projects} is
+	 * bob's Projects and {@code Other Users/bob@bringardner.us} bob's INBOX.
+	 */
+	public static final class MailboxRef {
+		/** The name the client uses. */
+		public final String name;
+		/** The store it is in; null for a user that doesn't exist, or the namespace's own name. */
+		public final MailStore store;
+		/** Its name in the store. */
+		public final String local;
+		/** True for the user's own mailboxes (the Personal namespace). */
+		public final boolean personal;
+
+		MailboxRef(String name, MailStore store, String local, boolean personal) {
+			this.name = name;
+			this.store = store;
+			this.local = local;
+			this.personal = personal;
+		}
+
+		/** True if it names a mailbox that can exist (a known user's). */
+		public boolean isMailbox() {
+			return store != null && local != null;
+		}
+	}
+
+	/** True if the name is in the Other Users namespace (or is its own name). */
+	public static boolean isOtherUsers(String name) {
+		return name.equals(OTHER_USERS) || name.startsWith(OTHER_USERS + DELIMITER);
+	}
+
+	/** Where a mailbox name (from {@link #mailboxArg(String)}) is. */
+	public MailboxRef ref(String name) throws IOException {
+		if (!isOtherUsers(name)) {
+			return new MailboxRef(name, store, name, true);
+		}
+		String rest = name.length() > OTHER_USERS.length() ? name.substring(OTHER_USERS.length() + 1) : "";
+		if (rest.isEmpty()) {
+			return new MailboxRef(name, null, null, false);
+		}
+		int i = rest.indexOf(DELIMITER);
+		String user = i < 0 ? rest : rest.substring(0, i);
+		String local = i < 0 || i == rest.length() - 1 ? INBOX : MailStore.normalize(rest.substring(i + 1));
+		return new MailboxRef(name, otherStore(user), local, false);
+	}
+
+	/** The client's name for a mailbox of another user's store. */
+	public static String otherName(String owner, String local) {
+		return OTHER_USERS + DELIMITER + owner + (INBOX.equals(local) ? "" : DELIMITER + local);
+	}
+
+	/** Another user's store (this user's own for its own name), or null if there is no such user. */
+	public MailStore otherStore(String user) throws IOException {
+		IPrincipal me = getPrincipal();
+		if (me != null && me.getName().equals(user)) {
+			return store;
+		}
+		if (otherStores.containsKey(user)) {
+			return otherStores.get(user);
+		}
+		IPrincipal p;
+		try {
+			us.bringardner.parley.net.server.IAccessControlList acl = getServer().getAccessControl();
+			p = acl == null ? null : acl.findPrincipal(user);
+		} catch (AccessControlUnavailableException e) {
+			throw new IOException("The users can't be read now: " + e.getMessage(), e);
+		}
+		MailStore s = p == null ? null : getImapServer().openMailStore(p);
+		otherStores.put(user, s);
+		return s;
+	}
+
+	/** True if the user may read mail (READ permission). */
+	public boolean canRead() {
+		return isAuthorized(ImapCommand.READ_PERMISSION);
+	}
+
+	/**
+	 * The user's rights on a mailbox: its ACL's, limited by the server's permissions; "" for a
+	 * mailbox that doesn't exist.
+	 */
+	public String rights(MailboxRef ref) throws IOException {
+		if (!ref.isMailbox()) {
+			return "";
+		}
+		IPrincipal me = getPrincipal();
+		String r = ref.store.rightsOf(ref.local, me.getName(), me.getGroups());
+		return MailboxAcl.limit(r, canRead(), canWrite());
+	}
+
+	/** The rights on the selected mailbox. */
+	public String getSelectedRights() {
+		return selectedRights;
+	}
+
+	/**
+	 * Reply NO for a mailbox the user may not use as asked: NONEXISTENT when the user can't see
+	 * it (no {@code l}), so its existence isn't told (RFC 4314 section 6), else NOPERM.
+	 */
+	public void noAccess(ImapRequest r, String rights) throws IOException {
+		if (rights.indexOf('l') < 0) {
+			no(r, CODE_NONEXISTENT, "No such mailbox");
+		} else {
+			no(r, CODE_NOPERM, "Permission denied");
+		}
+	}
+
+	/**
+	 * The rights on the nearest existing parent of a mailbox, which CREATE and RENAME's new name
+	 * need {@code k} on. A top level name in the Personal namespace has the user's own rights
+	 * (k unless the server makes it read only); in another user's, nothing.
+	 */
+	public String parentRights(MailboxRef ref) throws IOException {
+		if (!ref.isMailbox()) {
+			return "";
+		}
+		String name = ref.local;
+		int i = name.lastIndexOf(DELIMITER);
+		while (i > 0) {
+			String parent = name.substring(0, i);
+			if (ref.store.entry(parent) != null) {
+				return rights(new MailboxRef(parent, ref.store, parent, ref.personal));
+			}
+			i = parent.lastIndexOf(DELIMITER);
+		}
+		return ref.personal ? MailboxAcl.limit(MailboxAcl.ALL, canRead(), canWrite()) : "";
+	}
+
+	/**
+	 * The flags of a change the rights allow (RFC 4314 section 4): {@code s} for \Seen,
+	 * {@code t} for \Deleted, {@code w} for every other flag.
+	 */
+	public static java.util.Set<String> allowedFlags(java.util.Collection<String> flags, String rights) {
+		java.util.Set<String> ret = new java.util.LinkedHashSet<>();
+		for (String f : flags) {
+			if (mayChange(f, rights)) {
+				ret.add(f);
+			}
+		}
+		return ret;
+	}
+
+	/** True if the rights let the user set or clear this flag. */
+	public static boolean mayChange(String flag, String rights) {
+		if (flag.equalsIgnoreCase(SEEN)) {
+			return rights.indexOf('s') >= 0;
+		}
+		if (flag.equalsIgnoreCase(DELETED)) {
+			return rights.indexOf('t') >= 0;
+		}
+		return rights.indexOf('w') >= 0;
+	}
+
+	/** True if the rights let the user change some flag (READ-WRITE, RFC 4314 section 5.2). */
+	public static boolean writable(String rights) {
+		return MailboxAcl.hasAny(rights, "iewst");
+	}
+
 	/**
 	 * Select a mailbox (SELECT, EXAMINE). A mailbox selected before is closed
 	 * first, without expunging.
 	 */
 	public MailboxView select(String name, boolean readOnly) throws IOException {
+		MailboxRef ref = ref(name);
+		return select(ref, rights(ref), readOnly);
+	}
+
+	/**
+	 * Select a mailbox the user has {@code r} on. It is read only for EXAMINE, and when the
+	 * rights allow no change.
+	 * @since 2.0.0
+	 */
+	public MailboxView select(MailboxRef ref, String rights, boolean readOnly) throws IOException {
 		if (view != null) {
 			deselect();
 			states.moveTo(State.AUTHENTICATED);
@@ -601,9 +782,14 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 				untagged(OK + " [" + CODE_CLOSED + "] Previous mailbox closed");
 			}
 		}
-		Mailbox mb = store.open(name);
+		if (!ref.isMailbox()) {
+			throw new MailStore.StoreException(CODE_NONEXISTENT, "No such mailbox");
+		}
+		Mailbox mb = ref.store.open(ref.local);
 		mb.refresh(true);
-		view = mb.newView(readOnly || !canWrite());
+		view = mb.newView(readOnly || !writable(rights));
+		selectedRights = rights;
+		String name = ref.name;
 		selectedName = name;
 		savedSearch = null;
 		states.moveTo(State.SELECTED);
@@ -617,6 +803,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			view.close();
 			view = null;
 			selectedName = null;
+			selectedRights = "";
 			savedSearch = null;
 			if (store != null) {
 				store.getRegistry().release(mb);

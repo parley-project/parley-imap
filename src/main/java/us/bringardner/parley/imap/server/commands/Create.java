@@ -44,10 +44,19 @@ public class Create extends BaseCommand {
 			}
 		}
 		r.end();
-		if (!checkWrite(p, r)) {
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		if (!ref.isMailbox()) {
+			p.no(r, ref.store == null && ref.local != null ? CODE_NONEXISTENT : CODE_CANNOT,
+					ref.local == null ? "That is the Other Users namespace" : "No such user");
 			return;
 		}
-		store(p).create(name, use);
+		// k on the nearest existing parent (RFC 4314 section 4)
+		String parent = p.parentRights(ref);
+		if (parent.indexOf('k') < 0) {
+			p.noAccess(r, parent);
+			return;
+		}
+		ref.store.create(ref.local, use, p.getPrincipal().getName());
 		p.ok(r, "CREATE completed");
 	}
 

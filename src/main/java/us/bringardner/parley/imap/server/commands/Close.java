@@ -26,7 +26,8 @@ public class Close extends BaseCommand {
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		r.end();
 		MailboxView view = p.getView();
-		if (!view.isReadOnly() && !view.isRecreated()) {
+		// without e nothing is expunged, and CLOSE still succeeds (RFC 4314 section 4)
+		if (!view.isReadOnly() && !view.isRecreated() && p.getSelectedRights().indexOf('e') >= 0) {
 			// recreated by another server: its messages aren't the ones marked here, so none go
 			Mailbox mb = view.getMailbox();
 			long uidValidity = mb.getUidValidity();

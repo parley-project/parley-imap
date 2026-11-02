@@ -25,7 +25,13 @@ public class Status extends BaseCommand {
 		String name = p.mailboxArg(r.nextAstring());
 		List<String> items = items(r.nextList());
 		r.end();
-		p.untagged(statusLine(p, name, items));
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		String rights = p.rights(ref);
+		if (rights.indexOf('r') < 0) {
+			p.noAccess(r, rights);
+			return;
+		}
+		p.untagged(statusLine(p, ref, items));
 		p.ok(r, "STATUS completed");
 	}
 
@@ -56,7 +62,16 @@ public class Status extends BaseCommand {
 
 	/** "STATUS name (MESSAGES 2 ...)" */
 	public static String statusLine(ImapRequestProcessor p, String name, List<String> items) throws IOException {
-		Mailbox mb = p.getStore().open(name);
+		return statusLine(p, p.ref(name), items);
+	}
+
+	/** "STATUS name (MESSAGES 2 ...)" for a mailbox the caller checked the r right on */
+	public static String statusLine(ImapRequestProcessor p, ImapRequestProcessor.MailboxRef ref, List<String> items) throws IOException {
+		if (!ref.isMailbox()) {
+			throw new us.bringardner.parley.mail.store.MailStore.StoreException(CODE_NONEXISTENT, "No such mailbox");
+		}
+		String name = ref.name;
+		Mailbox mb = ref.store.open(ref.local);
 		try {
 			mb.refresh(false);
 			StringBuilder sb = new StringBuilder();
@@ -90,7 +105,7 @@ public class Status extends BaseCommand {
 			}
 			return "STATUS " + p.mailboxName(name) + " (" + sb + ")";
 		} finally {
-			p.getStore().getRegistry().release(mb);
+			ref.store.getRegistry().release(mb);
 		}
 	}
 }

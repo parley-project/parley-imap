@@ -2,6 +2,23 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Added (2026-11-02: mailbox ACLs, To-Do 3.4)
+
+- **RFC 4314 ACLs**: the ACL and RIGHTS=texk capabilities, SETACL, DELETEACL, GETACL, LISTRIGHTS and MYRIGHTS, and the
+  rights each command needs (see the README's "Mailbox access control"). The server's READ/WRITE permissions are a
+  ceiling; ADMIN gives no special rights.
+- **The Other Users namespace** (RFC 2342): `Other Users/<user>/<mailbox>`, `Other Users/<user>` being the user's INBOX.
+  LIST shows another user's mailbox only where the user has `l`, found through parley-mail's share index.
+  `ImapServer.openMailStore(principal)`, `getShareIndex()`; `ImapRequestProcessor.ref(name)`, `rights(ref)`,
+  `select(ref, rights, readOnly)`; `Status.statusLine(p, ref, items)`.
+
+### Changed (2026-11-02: mailbox ACLs, To-Do 3.4)
+
+- **WRITE alone no longer decides** what a session may change: the mailbox's rights do, limited by READ and WRITE.
+  CREATE, DELETE, RENAME, APPEND and COPY without the right get `NO [NOPERM]` (or `NO [NONEXISTENT]` for a mailbox
+  the user can't see), as before for a user without WRITE.
+- NAMESPACE answers `(("" "/")) (("Other Users/" "/")) NIL`.
+
 ### Changed (2026-11-02: durations and credentials, To-Do 2.19)
 
 - **`<prefix>.autologout` is a duration** (`30m`, `1h`; a bare number is still ms), read by parley-mail.

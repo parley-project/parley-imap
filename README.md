@@ -69,11 +69,11 @@ parley-net's launcher; see parley-mail's README.
 ### Protocol support
 
 - **IMAP4rev2 (RFC 9051)** for clients that send `ENABLE IMAP4rev2`, and **IMAP4rev1 (RFC 3501)** for the rest. A rev1 session gets `* n RECENT`, `[UNSEEN n]`, the `SEARCH` response, `LSUB` and `CHECK`. A rev2 session gets `ESEARCH`, `LIST` in `SELECT` and `[CLOSED]` responses.
-- **Commands:** CAPABILITY, NOOP, LOGOUT, STARTTLS, AUTHENTICATE (PLAIN, SCRAM-SHA-256, SCRAM-SHA-1), LOGIN, ENABLE, SELECT, EXAMINE, CREATE, DELETE, RENAME, SUBSCRIBE, UNSUBSCRIBE, LIST, LSUB, NAMESPACE, STATUS, APPEND, IDLE, CHECK, CLOSE, UNSELECT, EXPUNGE, SEARCH, FETCH, STORE, COPY, MOVE and UID (COPY, FETCH, MOVE, SEARCH, STORE, EXPUNGE).
-- **Extensions** (built into IMAP4rev2 and also offered to rev1 clients): SASL-IR, LITERAL+, ENABLE, IDLE, NAMESPACE, UNSELECT, UIDPLUS, ESEARCH, SEARCHRES, LIST-EXTENDED, LIST-STATUS, MOVE, SPECIAL-USE, CHILDREN, BINARY, STATUS=SIZE and UTF8=ACCEPT.
-- **FETCH:** FLAGS, UID, INTERNALDATE, RFC822.SIZE, ENVELOPE, BODY, BODYSTRUCTURE, BODY[section]<partial> (HEADER, HEADER.FIELDS[.NOT], TEXT, MIME, part numbers including attached messages), BODY.PEEK, BINARY[part], BINARY.PEEK, BINARY.SIZE, and the rev1 items RFC822, RFC822.HEADER and RFC822.TEXT. Non-PEEK fetches set `\Seen`.
+- **Commands:** CAPABILITY, NOOP, LOGOUT, STARTTLS, AUTHENTICATE (PLAIN, SCRAM-SHA-256, SCRAM-SHA-1), LOGIN, ENABLE, SELECT, EXAMINE, CREATE, DELETE, RENAME, SUBSCRIBE, UNSUBSCRIBE, LIST, LSUB, NAMESPACE, STATUS, APPEND, IDLE, SETACL, DELETEACL, GETACL, LISTRIGHTS, MYRIGHTS, CHECK, CLOSE, UNSELECT, EXPUNGE, SEARCH, FETCH, STORE, COPY, MOVE and UID (COPY, FETCH, MOVE, SEARCH, STORE, EXPUNGE).
+- **Extensions** (built into IMAP4rev2 and also offered to rev1 clients): SASL-IR, LITERAL+, ENABLE, IDLE, NAMESPACE, UNSELECT, UIDPLUS, ESEARCH, SEARCHRES, LIST-EXTENDED, LIST-STATUS, MOVE, SPECIAL-USE, CHILDREN, BINARY, STATUS=SIZE, ACL with RIGHTS=texk (RFC 4314) and UTF8=ACCEPT.
+- **FETCH:** FLAGS, UID, INTERNALDATE, RFC822.SIZE, ENVELOPE, BODY, BODYSTRUCTURE, BODY[section]<partial> (HEADER, HEADER.FIELDS[.NOT], TEXT, MIME, part numbers including attached messages), BODY.PEEK, BINARY[part], BINARY.PEEK, BINARY.SIZE, and the rev1 items RFC822, RFC822.HEADER and RFC822.TEXT. Non-PEEK fetches set `\Seen` (with the `s` right).
 - **SEARCH:** all RFC 9051 keys. Header text is matched after decoding RFC 2047 encoded words. BODY and TEXT search the decoded text of the text parts. `RETURN (MIN MAX COUNT ALL SAVE)` and `$` are supported.
-- **Not implemented:** CONDSTORE/QRESYNC, NOTIFY, QUOTA, ACL, METADATA, multi-APPEND, and SASL mechanisms other than PLAIN and SCRAM. SCRAM-SHA-256 and SCRAM-SHA-1 (RFC 5802, 7677) are offered when the access control list keeps SCRAM credentials for every user (parley-net's `FileBasedAcl --scram`, or parley-net-acl-jdbc).
+- **Not implemented:** CONDSTORE/QRESYNC, NOTIFY, QUOTA, METADATA, a Shared namespace, multi-APPEND, and SASL mechanisms other than PLAIN and SCRAM. SCRAM-SHA-256 and SCRAM-SHA-1 (RFC 5802, 7677) are offered when the access control list keeps SCRAM credentials for every user (parley-net's `FileBasedAcl --scram`, or parley-net-acl-jdbc).
 
 ### Mail storage (shared with POP3)
 
@@ -92,6 +92,32 @@ select it again. See "Several servers on one store" in the parley-mail README.
 ### Users and permissions
 
 Users come from the access control list, set up as for Pop3Server with the `parley.mail.imap.authenticationProvider` property (e.g. `FileBasedAcl` with `parley.mail.imap.userFile`). READ is needed to log in. WRITE is needed for any change: without it, SELECT opens mailboxes read-only, and APPEND, CREATE, DELETE and RENAME get `NO [NOPERM]`. User names and passwords are prepared with SASLprep (RFC 4013), as for POP3.
+
+### Mailbox access control (RFC 4314)
+
+Each mailbox has an access control list, kept by parley-mail in its folder (`.imap-acl`, shared with POP3):
+identifiers are full login addresses (`bob@bringardner.us`), groups written `$` and their full name
+(`$sales@bringardner.us`, from the user's groups in the access control list) and `anyone` (every logged in user);
+`-identifier` takes rights away. A mailbox without a list gives its owner `lrswipkxtea` and no one else anything;
+the owner always keeps `l` and `a`. SETACL (`+rights`, `-rights` or `rights`), DELETEACL, GETACL and LISTRIGHTS need
+`a`; MYRIGHTS any of `l r i k x a`. SETACL accepts `anyone`, a group with its domain, or a user the access control list
+knows. The obsolete `c` and `d` are read as `k` and `xte`, and added to responses for older clients.
+
+The server's permissions are a ceiling: rights = the mailbox's ACL ∩ what READ and WRITE allow (without WRITE only `l`
+and `r`, so read only everywhere). Every command checks its rights: SELECT, EXAMINE and STATUS `r`; CREATE `k` on the
+nearest existing parent (a top level personal mailbox needs WRITE); DELETE `x`; RENAME `x`, and `k` on the new parent;
+APPEND and COPY `i` on the target (flags the rights don't allow are left off); MOVE also `t` and `e` on the source;
+STORE `s` for `\Seen`, `t` for `\Deleted`, `w` for the others (it fails only when none may change); EXPUNGE `e` (CLOSE
+expunges only with it); a FETCH sets `\Seen` only with `s`. A mailbox the user has neither `l` nor the right asked for
+on answers `NO [NONEXISTENT]`, so its existence isn't told; with `l`, `NO [NOPERM]`. SELECT reports READ-ONLY when the
+rights allow no change, and PERMANENTFLAGS lists only the flags the user may change. Rights are read when a mailbox
+is selected. A mail administrator (ADMIN) has no special rights here; others' ACLs are changed in parley-mail-admin.
+
+NAMESPACE offers the Personal namespace and **Other Users** (`Other Users/`): `Other Users/bob@bringardner.us/Projects`
+is bob's Projects and `Other Users/bob@bringardner.us` bob's INBOX. LIST shows another user's mailbox only where the
+user has `l` (and `Other Users` itself, `\Noselect`, when any is shown); it finds them through the maildrop root's share
+index (`.imap-shares`, kept by parley-mail when ACLs change). A user can CREATE under another user's mailbox with `k`
+(getting every right on the new one), but not at the top of another user's namespace.
 
 ### Configuration
 

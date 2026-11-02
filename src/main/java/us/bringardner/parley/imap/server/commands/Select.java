@@ -39,7 +39,13 @@ public class Select extends BaseCommand {
 			p.bad(r, "SELECT parameters are not supported");
 			return;
 		}
-		MailboxView view = p.select(name, isReadOnly());
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		String rights = p.rights(ref);
+		if (rights.indexOf('r') < 0) {
+			p.noAccess(r, rights);
+			return;
+		}
+		MailboxView view = p.select(ref, rights, isReadOnly());
 		Mailbox mb = view.getMailbox();
 		List<Long> uids = view.uids();
 		Set<String> keywords = new LinkedHashSet<>();
@@ -69,8 +75,11 @@ public class Select extends BaseCommand {
 		if (view.isReadOnly()) {
 			p.untagged(OK + " [PERMANENTFLAGS ()] No permanent flags permitted");
 		} else {
-			List<String> perm = new ArrayList<>(flags);
-			perm.add("\\*");
+			// only the flags the rights let the user change (RFC 4314 section 5.2)
+			List<String> perm = new ArrayList<>(ImapRequestProcessor.allowedFlags(flags, rights));
+			if (rights.indexOf('w') >= 0) {
+				perm.add("\\*");
+			}
 			p.untagged(OK + " [PERMANENTFLAGS " + ImapRequestProcessor.flagList(perm) + "] Flags permitted");
 		}
 		if (!p.isRev2() && firstUnseen > 0) {

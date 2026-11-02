@@ -19,10 +19,22 @@ public class Rename extends BaseCommand {
 		String from = p.mailboxArg(r.nextAstring());
 		String to = p.mailboxArg(r.nextAstring());
 		r.end();
-		if (!checkWrite(p, r)) {
+		ImapRequestProcessor.MailboxRef src = p.ref(from);
+		String rights = p.rights(src);
+		if (rights.indexOf('x') < 0) {
+			p.noAccess(r, rights);
 			return;
 		}
-		store(p).rename(from, to);
+		ImapRequestProcessor.MailboxRef dst = p.ref(to);
+		if (!dst.isMailbox() || dst.store != src.store) {
+			p.no(r, CODE_CANNOT, "A mailbox can't be moved to another user");
+			return;
+		}
+		if (p.parentRights(dst).indexOf('k') < 0) {
+			p.no(r, CODE_NOPERM, "Permission denied");
+			return;
+		}
+		src.store.rename(src.local, dst.local);
 		p.ok(r, "RENAME completed");
 	}
 }
