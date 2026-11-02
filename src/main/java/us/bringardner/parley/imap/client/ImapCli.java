@@ -49,7 +49,8 @@ public class ImapCli {
 			+ "  --plain             no encryption (STARTTLS is still used if offered)\n"
 			+ "  --insecure          no encryption at all (testing only)\n"
 			+ "  --user USER         log in as USER\n"
-			+ "  --password PASS     the password (else $IMAP_PASSWORD, else prompted)\n"
+			+ "  --password REF      where the password is kept: @env:NAME, @keychain:NAME, @file:PATH\n"
+			+ "                      (never the password itself; without it, prompted)\n"
 			+ "  --trust-all         accept any server certificate (testing only)\n"
 			+ "  --timeout SECONDS   how long to wait for the server (default 60)\n"
 			+ "  --rev1              don't enable IMAP4rev2\n"
@@ -216,6 +217,12 @@ public class ImapCli {
 		if (!config.isTrustAllCertificates()) {
 			config.setCertificateValidator(new ConsoleValidator(err));
 		}
+		if (password != null && !us.bringardner.parley.files.credentials.CredentialRef.isReference(password)) {
+			err.println("--password names where the password is kept (@env:NAME, @keychain:NAME, @file:PATH), not the password: "
+					+ "a password on the command line shows in process listings");
+			err.println(USAGE);
+			return 2;
+		}
 		try (ImapClient client = new ImapClient(config)) {
 			ImapCli cli = new ImapCli(client, reader, out);
 			if (trace) {
@@ -226,10 +233,9 @@ public class ImapCli {
 				out.println("Connected to " + config.getHost() + ":" + config.getPort());
 			}
 			if (user != null) {
-				if (password == null) {
-					password = System.getenv("IMAP_PASSWORD");
-				}
-				if (password == null) {
+				if (password != null) {
+					password = resolvePassword(password, config.getHost(), user);
+				} else {
 					password = readPassword(reader, err, "Password for " + user + ": ");
 				}
 				client.login(user, password);
@@ -249,6 +255,20 @@ public class ImapCli {
 			throw new IllegalArgumentException(option + " needs a value");
 		}
 		return args[i];
+	}
+
+	/** IMAP's id for its credentials, {@code parley.credentials.imap.*} */
+	public static final String CREDENTIALS_ID = "imap";
+
+	/** The password a reference names (parley-files' Credentials), resolved as IMAP's */
+	static String resolvePassword(String ref, String host, String user) throws IOException {
+		char[] secret = us.bringardner.parley.files.credentials.Credentials.secret(ref,
+				new us.bringardner.parley.files.credentials.CredentialRequest(CREDENTIALS_ID, "password", host, user));
+		try {
+			return new String(secret);
+		} finally {
+			java.util.Arrays.fill(secret, '\0');
+		}
 	}
 
 	private static String readPassword(BufferedReader reader, PrintStream err, String prompt) throws IOException {

@@ -2,6 +2,14 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-02: durations and credentials, To-Do 2.19)
+
+- **`<prefix>.autologout` is a duration** (`30m`, `1h`; a bare number is still ms), read by parley-mail.
+- **ImapCli's `--password` names where the password is kept** (`@env:NAME`, `@keychain:NAME`, `@file:PATH`; parley-files'
+  credentials, resolved as IMAP's, `parley.credentials.imap.*`), never the password: a literal one is refused, since it
+  shows in process listings. `$IMAP_PASSWORD` is no longer read (`--password @env:IMAP_PASSWORD` does the same).
+  Without `--password` the password is asked for, as before.
+
 ### Changed (2026-11-01: parley.servers says which servers run, To-Do 2.12)
 
 - **`imaps` runs on 993 when `parley.servers` lists it** and it has a TLS key store (skipped with a warning while it
