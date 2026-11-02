@@ -68,8 +68,7 @@ public class Copy extends BaseCommand {
 			return;
 		}
 		try {
-			List<MessageInfo> added = transfer(p, source, target, list);
-			dropFlags(target, added, rights);
+			List<MessageInfo> added = transfer(p, source, target, list, allowedFlags(rights));
 			String code = null;
 			if (!added.isEmpty()) {
 				List<Long> from = new ArrayList<>();
@@ -87,32 +86,28 @@ public class Copy extends BaseCommand {
 		}
 	}
 
-	/** Take off the copies the flags the rights on the target don't allow (RFC 4314 section 4). */
-	static void dropFlags(Mailbox target, List<MessageInfo> added, String rights) throws IOException {
+	/**
+	 * The flags a copy may keep with these rights on the target (RFC 4314 section 4): the copies
+	 * are made without the others, so a flag the user may not set never reaches the target, not
+	 * even for a moment. Null when every flag is allowed.
+	 */
+	static java.util.function.Predicate<String> allowedFlags(String rights) {
 		if (rights.indexOf('s') >= 0 && rights.indexOf('t') >= 0 && rights.indexOf('w') >= 0) {
-			return;
+			return null;
 		}
-		for (MessageInfo m : added) {
-			java.util.Set<String> drop = new java.util.LinkedHashSet<>();
-			for (String f : m.getFlags(target)) {
-				if (!ImapRequestProcessor.mayChange(f, rights)) {
-					drop.add(f);
-				}
-			}
-			if (!drop.isEmpty()) {
-				target.storeFlags(m, Mailbox.FlagOp.REMOVE, drop, null);
-			}
-		}
-		target.saveIfDirty();
+		return f -> ImapRequestProcessor.mayChange(f, rights);
 	}
 
 	protected boolean checkSource(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		return true;
 	}
 
-	protected List<MessageInfo> transfer(ImapRequestProcessor p, Mailbox source, Mailbox target, List<MessageInfo> list)
-			throws IOException {
-		return source.copyTo(target, list);
+	/**
+	 * @param keepFlag the flags the new messages may have (null: all), see {@link #allowedFlags(String)}
+	 */
+	protected List<MessageInfo> transfer(ImapRequestProcessor p, Mailbox source, Mailbox target, List<MessageInfo> list,
+			java.util.function.Predicate<String> keepFlag) throws IOException {
+		return source.copyTo(target, list, keepFlag);
 	}
 
 	protected void done(ImapRequestProcessor p, ImapRequest r, String code) throws IOException {

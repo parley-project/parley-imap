@@ -98,6 +98,10 @@ public class TestImapProviders {
 		launcher.startAll();
 		assertEquals(ServerLauncher.State.RUNNING, launcher.getState("imap"));
 		assertEquals(port, launcher.getServer("imap").getPort());
+		// To-Do 3.6: the mail store's bean is named by the server's id, as its Server bean is
+		javax.management.MBeanServer mbs = java.lang.management.ManagementFactory.getPlatformMBeanServer();
+		assertTrue(mbs.isRegistered(new javax.management.ObjectName("us.bringardner.parley:type=MailStore,name=imap")),
+				mbs.queryNames(new javax.management.ObjectName("us.bringardner.parley:type=MailStore,*"), null).toString());
 
 		try (Socket s = new Socket("127.0.0.1", port)) {
 			BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.US_ASCII));
