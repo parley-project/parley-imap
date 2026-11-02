@@ -34,10 +34,10 @@ public class Move extends Copy {
 	}
 
 	@Override
-	protected List<MessageInfo> transfer(ImapRequestProcessor p, Mailbox source, Mailbox target, List<MessageInfo> list)
-			throws IOException {
+	protected List<MessageInfo> transfer(ImapRequestProcessor p, Mailbox source, Mailbox target, List<MessageInfo> list,
+			java.util.function.Predicate<String> keepFlag) throws IOException {
 		// every view, this one included, is told about the expunges
-		return source.moveTo(target, list, null);
+		return source.moveTo(target, list, null, keepFlag);
 	}
 
 	@Override

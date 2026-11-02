@@ -2,6 +2,12 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-02: COPY and MOVE flags, To-Do 3.6)
+
+- **COPY and MOVE make the copies with only the flags the rights on the target allow** (RFC 4314 section 4), through
+  parley-mail's `copyTo` / `moveTo` with a flag filter: a flag the user may not set never reaches the target. They were
+  copied with every flag and the others taken off afterwards.
+
 ### Added (2026-11-02: mailbox ACLs, To-Do 3.4)
 
 - **RFC 4314 ACLs**: the ACL and RIGHTS=texk capabilities, SETACL, DELETEACL, GETACL, LISTRIGHTS and MYRIGHTS, and the

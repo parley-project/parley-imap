@@ -213,6 +213,40 @@ public class TestImapAcl {
 		}
 	}
 
+	/** To-Do 3.6: COPY and MOVE make the copies with only the flags the target's rights allow */
+	@Test
+	public void copiesKeepOnlyTheFlagsTheTargetAllows() throws Exception {
+		try (ImapClient a = login("alice@x.us")) {
+			a.ok("CREATE Drop");
+			a.ok("SETACL Drop olga@x.us lri");
+			a.ok("CREATE DropSeen");
+			a.ok("SETACL DropSeen olga@x.us lris");
+			a.ok("CREATE DropAll");
+			a.ok("SETACL DropAll olga@x.us lrswite");
+		}
+		try (ImapClient o = login("olga@x.us")) {
+			for (int i = 0; i < 4; i++) {
+				assertTrue(tagged(o.append("INBOX", "(\\Seen \\Flagged $Work)", bytes(MSG))).contains("OK"));
+			}
+			o.ok("SELECT INBOX");
+			o.ok("COPY 1 \"Other Users/alice@x.us/Drop\"");
+			o.ok("COPY 2 \"Other Users/alice@x.us/DropSeen\"");
+			o.ok("COPY 3 \"Other Users/alice@x.us/DropAll\"");
+			o.ok("MOVE 4 \"Other Users/alice@x.us/DropSeen\"");
+		}
+		try (ImapClient a = login("alice@x.us")) {
+			a.ok("SELECT Drop");
+			List<String> f = a.ok("FETCH 1 FLAGS");
+			assertFalse(any(f, "\\Seen") || any(f, "\\Flagged") || any(f, "$Work"), "i only: no flag: " + f);
+			a.ok("SELECT DropSeen");
+			f = a.ok("FETCH 1:2 FLAGS");
+			assertTrue(any(f, "1 FETCH (FLAGS (\\Seen))") && any(f, "2 FETCH (FLAGS (\\Seen))"), "s: \\Seen only, COPY and MOVE: " + f);
+			a.ok("SELECT DropAll");
+			f = a.ok("FETCH 1 FLAGS");
+			assertTrue(any(f, "\\Seen") && any(f, "\\Flagged") && any(f, "$Work"), "s, w: every flag: " + f);
+		}
+	}
+
 	@Test
 	public void theServersPermissionsAreACeilingAndAdminIsNoOneSpecial() throws Exception {
 		try (ImapClient r = login("reader@x.us")) {
