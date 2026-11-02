@@ -609,7 +609,7 @@ public class TestImapClient {
 		ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
 		ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
 		int code = ImapCli.run(new String[] {"--host", "localhost", "--port", Integer.toString(port), "--plain",
-				"--trust-all", "--user", "tony", "--password", "secret"},
+				"--trust-all", "--user", "tony", "--password", passwordFile("secret")},
 				new ByteArrayInputStream(bytes(script)), new PrintStream(outBytes, true, "UTF-8"),
 				new PrintStream(errBytes, true, "UTF-8"));
 		String out = outBytes.toString("UTF-8");
@@ -631,6 +631,20 @@ public class TestImapClient {
 		dir.delete();
 	}
 
+	/** A {@code @file:} reference to a file (readable by its owner only) holding this password: ImapCli's --password */
+	private static String passwordFile(String password) throws IOException {
+		java.nio.file.Path f;
+		try {
+			f = Files.createTempFile("imapcli", ".secret",
+					java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+		} catch (UnsupportedOperationException e) { // no POSIX permissions (Windows): the check is skipped there
+			f = Files.createTempFile("imapcli", ".secret");
+		}
+		f.toFile().deleteOnExit();
+		Files.write(f, password.getBytes(StandardCharsets.UTF_8));
+		return "@file:" + f;
+	}
+
 	@Test
 	public void testCliOneShotAndUsage() throws Exception {
 		ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
@@ -640,12 +654,12 @@ public class TestImapClient {
 		InputStream none = new ByteArrayInputStream(new byte[0]);
 
 		assertEquals(0, ImapCli.run(new String[] {"--host", "localhost", "--port", Integer.toString(port), "--starttls",
-				"--trust-all", "--user", "tony", "--password", "secret", "status", "INBOX"}, none, out, err),
+				"--trust-all", "--user", "tony", "--password", passwordFile("secret"), "status", "INBOX"}, none, out, err),
 				errBytes.toString("UTF-8"));
 		assertTrue(outBytes.toString("UTF-8").startsWith("INBOX: "), outBytes.toString("UTF-8"));
 
 		assertEquals(1, ImapCli.run(new String[] {"--host", "localhost", "--port", Integer.toString(port), "--plain",
-				"--trust-all", "--user", "tony", "--password", "nope", "list"}, none, out, err));
+				"--trust-all", "--user", "tony", "--password", passwordFile("nope"), "list"}, none, out, err));
 		assertTrue(errBytes.toString("UTF-8").contains("Error: "), errBytes.toString("UTF-8"));
 
 		assertEquals(2, ImapCli.run(new String[] {"--port", "1"}, none, out, err));

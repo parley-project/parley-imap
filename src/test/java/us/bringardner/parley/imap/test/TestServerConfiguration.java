@@ -59,6 +59,14 @@ public class TestServerConfiguration {
 	}
 
 	@Test
+	public void autologoutIsADuration() throws Exception {
+		ImapServer s = make(props("parley.mail.root", dir.getPath(), "parley.mail.imap.autologout", "45m"), false);
+		assertEquals(45 * 60_000, s.getAutologout());
+		s = make(props("parley.mail.root", dir.getPath(), "parley.mail.imap.autologout", "thirty minutes"), false);
+		assertEquals(ImapServer.DEFAULT_AUTOLOGOUT, s.getAutologout(), "a wrong value gives the default");
+	}
+
+	@Test
 	public void theSystemPropertiesArentRead() throws Exception {
 		System.setProperty("parley.mail.imap.appendLimit", "77");
 		try {

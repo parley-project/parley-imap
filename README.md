@@ -101,7 +101,7 @@ Users come from the access control list, set up as for Pop3Server with the `parl
 | `parley.mail.imaps.port` | 993 | Port of IMAP with implicit TLS (`imaps`, which runs when `parley.servers` lists it and it has a key store) |
 | `parley.mail.root` | (required) | Maildrop root, shared with POP3 and SMTP; the store has its own settings (see parley-mail) |
 | `parley.mail.fileSource` | the default factory | FileSource factory for the root |
-| `parley.mail.imap.autologout` | 1800000 ms | Idle sessions get `* BYE` and are closed. RFC 9051 requires at least 30 minutes. `setAutologout()` |
+| `parley.mail.imap.autologout` | `30m` | Idle sessions get `* BYE` and are closed (a duration: `45m`, `1h`; a bare number is ms). RFC 9051 requires at least 30 minutes. `setAutologout()` |
 | `parley.mail.imap.loginFailureDelay` | 1000 ms | Delay before replying to a failed login. The connection is closed after 3 failures. `setLoginFailureDelay()` |
 | `parley.mail.imap.requireTls` | false | Advertise LOGINDISABLED and refuse LOGIN and AUTHENTICATE until STARTTLS. `setRequireTls()` |
 | `parley.mail.imap.appendLimit` | 104857600 | Largest message APPEND accepts; larger ones get `NO [TOOBIG]`. `setAppendLimit()` |
@@ -202,7 +202,7 @@ INBOX> show 42
 INBOX> get 42 2 report.pdf
 ```
 
-Options: `--host`, `--port`, `--tls` (the default, port 993), `--starttls`, `--plain` (STARTTLS if offered), `--insecure`, `--user`, `--password` (else `$IMAP_PASSWORD`, else a prompt), `--trust-all` (test servers only), `--timeout SECONDS`, `--rev1`, `--trace` (the protocol, with passwords hidden).
+Options: `--host`, `--port`, `--tls` (the default, port 993), `--starttls`, `--plain` (STARTTLS if offered), `--insecure`, `--user`, `--password REF` (where the password is kept: `@env:NAME`, `@keychain:NAME`, `@file:PATH`, never the password itself; without it, a prompt), `--trust-all` (test servers only), `--timeout SECONDS`, `--rev1`, `--trace` (the protocol, with passwords hidden).
 
 Commands (type `help`): `list`, `lsub`, `status`, `select`, `examine`, `create`, `delete`, `rename`, `subscribe`, `unsubscribe`, `close`, `ls`, `show`, `parts`, `save`, `get`, `search`, `flag`, `unflag`, `read`, `unread`, `rm`, `expunge`, `cp`, `mv`, `put`, `idle`, `caps`, `noop`, `raw`, `trace`, `quit`.
 
