@@ -16,6 +16,9 @@
 
 ### Added
 
+- **The settings this module reads are listed** in `META-INF/parley/settings.list`, so a Parley server's
+  start-up check (parley-net's `KnownSettings`, To-Do 2.16) knows them and warns only about a setting
+  nothing reads. A test checks the list has every name the code here reads.
 - **`ImapProviders`**: parley-net `ServerProvider`s `imap` and `imaps` (implicit TLS), so IMAP runs alone or with other
   servers in one process (parley-net's `ServerMain`), and is managed with JMX. `ImapServer.main` runs them with
   `ServerMain.launch`: settings from `parley-mail.properties`, then `parley-imap.properties`; `imaps` runs when
