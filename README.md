@@ -111,11 +111,13 @@ STORE `s` for `\Seen`, `t` for `\Deleted`, `w` for the others (it fails only whe
 expunges only with it); a FETCH sets `\Seen` only with `s`. A mailbox the user has neither `l` nor the right asked for
 on answers `NO [NONEXISTENT]`, so its existence isn't told; with `l`, `NO [NOPERM]`. SELECT reports READ-ONLY when the
 rights allow no change, and PERMANENTFLAGS lists only the flags the user may change. Rights are read when a mailbox
-is selected. A mail administrator (ADMIN) has no special rights here; others' ACLs are changed in parley-mail-admin.
+is selected. A mail administrator (ADMIN) has no special rights here (changing other users' ACLs in parley-mail-admin is still to come). SETACL stores a user as the access control list names them, so another spelling of the name still matches the login.
 
 NAMESPACE offers the Personal namespace and **Other Users** (`Other Users/`): `Other Users/bob@bringardner.us/Projects`
 is bob's Projects and `Other Users/bob@bringardner.us` bob's INBOX. LIST shows another user's mailbox only where the
-user has `l` (and `Other Users` itself, `\Noselect`, when any is shown); it finds them through the maildrop root's share
+user has `l` (and `Other Users` itself, `\Noselect`, when any is shown, and `Other Users/<user>` as `\Noselect` when that
+user's INBOX isn't visible but other mailboxes are); `\HasChildren` counts only the visible mailboxes, and the owner's
+special uses (`\Sent`, ...) aren't shown; it finds them through the maildrop root's share
 index (`.imap-shares`, kept by parley-mail when ACLs change). A user can CREATE under another user's mailbox with `k`
 (getting every right on the new one), but not at the top of another user's namespace.
 

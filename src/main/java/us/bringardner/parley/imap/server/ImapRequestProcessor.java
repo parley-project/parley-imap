@@ -635,7 +635,8 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	/** Where a mailbox name (from {@link #mailboxArg(String)}) is. */
 	public MailboxRef ref(String name) throws IOException {
-		if (!isOtherUsers(name)) {
+		// a personal mailbox made before 2.0.0 under the name "Other Users" stays the user's own
+		if (!isOtherUsers(name) || (store != null && store.entry(name) != null)) {
 			return new MailboxRef(name, store, name, true);
 		}
 		String rest = name.length() > OTHER_USERS.length() ? name.substring(OTHER_USERS.length() + 1) : "";

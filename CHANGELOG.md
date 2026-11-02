@@ -17,7 +17,8 @@
 - **WRITE alone no longer decides** what a session may change: the mailbox's rights do, limited by READ and WRITE.
   CREATE, DELETE, RENAME, APPEND and COPY without the right get `NO [NOPERM]` (or `NO [NONEXISTENT]` for a mailbox
   the user can't see), as before for a user without WRITE.
-- NAMESPACE answers `(("" "/")) (("Other Users/" "/")) NIL`.
+- NAMESPACE answers `(("" "/")) (("Other Users/" "/")) NIL`. A personal mailbox already named `Other Users` (or under
+  it) stays the user's own; new names there are in the Other Users namespace.
 
 ### Changed (2026-11-02: durations and credentials, To-Do 2.19)
 
