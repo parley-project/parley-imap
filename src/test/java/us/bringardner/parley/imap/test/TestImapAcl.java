@@ -44,6 +44,10 @@ public class TestImapAcl {
 		server.getLogger().setLevel(Level.ERROR);
 		server.setAccessControl(ServerTestSupport.acl(
 				"alice@x.us, pw, READ|WRITE",
+				"s1@x.us, pw, READ|WRITE, maildrop=shared/box",
+				"olga@x.us, pw, READ|WRITE",
+				"erin@x.us, pw, READ|WRITE",
+				"s2@x.us, pw, READ|WRITE, maildrop=shared/box",
 				"bob@x.us, pw, READ|WRITE",
 				"carol@x.us, pw, READ|WRITE, groups=sales@x.us",
 				"dave@other.com, pw, READ|WRITE",
@@ -102,8 +106,9 @@ public class TestImapAcl {
 			assertTrue(caps.contains(" ACL") && caps.contains(" RIGHTS=texk"), caps);
 			assertEquals("* MYRIGHTS INBOX lrswipkxteacd", a.ok("MYRIGHTS INBOX").get(0));
 			assertEquals("* ACL INBOX alice@x.us lrswipkxteacd", a.ok("GETACL INBOX").get(0), "no file: the owner's default");
-			assertEquals("* LISTRIGHTS INBOX alice@x.us la r s w i p k x t e", a.ok("LISTRIGHTS INBOX alice@x.us").get(0));
-			assertEquals("* LISTRIGHTS INBOX bob@x.us \"\" l r s w i p k x t e a", a.ok("LISTRIGHTS INBOX bob@x.us").get(0));
+			assertEquals("* LISTRIGHTS INBOX alice@x.us la r s w i p k x t e", a.ok("LISTRIGHTS INBOX alice@x.us").get(0).replace(" c d", ""));
+			assertTrue(a.ok("LISTRIGHTS INBOX alice@x.us").get(0).endsWith(" e c d"), "the obsolete c and d can be granted");
+			assertEquals("* LISTRIGHTS INBOX bob@x.us \"\" l r s w i p k x t e a c d", a.ok("LISTRIGHTS INBOX bob@x.us").get(0));
 
 			assertTrue(tagged(a.cmd("SETACL INBOX bob@x.us lZ")).contains("BAD"), "not a right");
 			assertTrue(tagged(a.cmd("SETACL INBOX bob@x.us R")).contains("BAD"), "upper case");
@@ -116,9 +121,9 @@ public class TestImapAcl {
 			assertEquals("* MYRIGHTS INBOX la", a.ok("MYRIGHTS INBOX").get(0));
 			a.ok("SETACL INBOX alice@x.us lrswipkxtea");
 			assertEquals("* MYRIGHTS INBOX lrswipkxteacd", a.ok("MYRIGHTS INBOX").get(0));
+			a.ok("SETACL INBOX alice@x.us \"\"");
 			a.ok("DELETEACL INBOX alice@x.us");
-			assertEquals("* MYRIGHTS INBOX la", a.ok("MYRIGHTS INBOX").get(0), "the entry is gone; l and a stay");
-			a.ok("SETACL INBOX alice@x.us lrswipkxtea");
+			assertEquals("* MYRIGHTS INBOX lrswipkxteacd", a.ok("MYRIGHTS INBOX").get(0), "no entry of her own: every right again");
 		}
 	}
 
@@ -137,7 +142,8 @@ public class TestImapAcl {
 			List<String> list = b.ok("LIST \"\" \"*\"");
 			assertTrue(has(list, "* LIST (\\Noselect \\HasChildren) \"/\" \"Other Users\""), list.toString());
 			assertTrue(has(list, "* LIST (\\HasNoChildren) \"/\" \"Other Users/alice@x.us/Projects\""), list.toString());
-			assertFalse(any(list, "\"Other Users/alice@x.us\""), "no rights on alice's INBOX: not listed");
+			assertTrue(has(list, "* LIST (\\Noselect \\HasChildren) \"/\" \"Other Users/alice@x.us\""),
+					"no rights on alice's INBOX: only her level, \\Noselect: " + list);
 			assertTrue(any(b.ok("LIST \"Other Users/\" \"%/%\""), "Other Users/alice@x.us/Projects"));
 
 			List<String> sel = b.ok("SELECT \"Other Users/alice@x.us/Projects\"");
@@ -243,6 +249,50 @@ public class TestImapAcl {
 		try (ImapClient a = login("alice@x.us")) {
 			String acl = a.ok("GETACL \"Team/Bob's\"").get(0);
 			assertTrue(acl.contains("alice@x.us lrswipkxteacd") && acl.contains("bob@x.us lrswipkxteacd"), acl);
+		}
+	}
+
+	@Test
+	public void browsingLevelByLevelShowsOnlyWhatMayBeSeen() throws Exception {
+		try (ImapClient a = login("olga@x.us")) {
+			a.ok("CREATE Work");
+			a.ok("CREATE Work/Secret");
+			a.ok("SETACL Work erin@x.us lr");
+		}
+		try (ImapClient d = login("erin@x.us")) {
+			List<String> top = d.ok("LIST \"\" \"%\"");
+			assertTrue(has(top, "* LIST (\\Noselect \\HasChildren) \"/\" \"Other Users\""), top.toString());
+			List<String> users = d.ok("LIST \"Other Users/\" \"%\"");
+			assertTrue(has(users, "* LIST (\\Noselect \\HasChildren) \"/\" \"Other Users/olga@x.us\""), "the owner's level: " + users);
+			List<String> work = d.ok("LIST \"Other Users/olga@x.us/\" \"%\"");
+			assertTrue(has(work, "* LIST (\\HasNoChildren) \"/\" \"Other Users/olga@x.us/Work\""), "Secret isn't told: " + work);
+			assertFalse(any(d.ok("LIST \"\" \"*\""), "Secret"));
+		}
+		try (ImapClient a = login("olga@x.us")) {
+			a.ok("SETACL INBOX erin@x.us l");
+			a.ok("SETACL Sent erin@x.us l");
+		}
+		try (ImapClient d = login("erin@x.us")) {
+			List<String> users = d.ok("LIST \"Other Users/\" \"%\"");
+			assertTrue(has(users, "* LIST (\\HasChildren) \"/\" \"Other Users/olga@x.us\""), "her INBOX, with its visible children: " + users);
+			assertTrue(any(d.ok("LIST \"Other Users/\" \"*\""), "\"Other Users/olga@x.us/Sent\""));
+			for (String line : d.ok("LIST \"Other Users/\" \"*\"")) {
+				assertFalse(line.contains("\\Sent"), "no special use outside the Personal namespace: " + line);
+			}
+		}
+		try (ImapClient a = login("olga@x.us")) {
+			a.ok("DELETEACL INBOX erin@x.us");
+		}
+	}
+
+	@Test
+	public void usersWhoShareAMaildropKeepTheirRights() throws Exception {
+		try (ImapClient s1 = login("s1@x.us")) {
+			s1.ok("SETACL INBOX bob@x.us lr");
+		}
+		try (ImapClient s2 = login("s2@x.us")) {
+			assertEquals("* MYRIGHTS INBOX lrswipkxteacd", s2.ok("MYRIGHTS INBOX").get(0));
+			assertTrue(tagged(s2.ok("SELECT INBOX")).contains("[READ-WRITE]"));
 		}
 	}
 }

@@ -35,12 +35,12 @@ public class SetAcl extends BaseCommand {
 		if (ref == null) {
 			return;
 		}
-		String why = AclSupport.checkGrantee(p, id);
-		if (why != null) {
-			p.no(r, CODE_CANNOT, why);
+		String grantee = AclSupport.grantee(p, id);
+		if (grantee == null) {
+			p.no(r, CODE_CANNOT, "Rights can be given to anyone, a group with its domain ($sales@example.com) or a user");
 			return;
 		}
-		ref.store.setRights(ref.local, id, change);
+		ref.store.setRights(ref.local, grantee, change);
 		p.ok(r, "SETACL completed");
 	}
 }

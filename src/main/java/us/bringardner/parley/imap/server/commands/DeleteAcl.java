@@ -26,7 +26,9 @@ public class DeleteAcl extends BaseCommand {
 		if (ref == null) {
 			return;
 		}
-		ref.store.deleteRights(ref.local, id);
+		// a user as the access control list names it, as SETACL stored it
+		String stored = AclSupport.grantee(p, id);
+		ref.store.deleteRights(ref.local, stored != null ? stored : id);
 		p.ok(r, "DELETEACL completed");
 	}
 }

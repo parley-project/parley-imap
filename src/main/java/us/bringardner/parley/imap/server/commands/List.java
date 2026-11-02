@@ -174,24 +174,41 @@ public class List extends BaseCommand {
 		return false;
 	}
 
+	/** What LIST says about a name. */
+	static final class Item {
+		final boolean noselect;
+		final boolean hasChildren;
+		final boolean noinferiors;
+		final String specialUse;
+
+		Item(boolean noselect, boolean hasChildren, boolean noinferiors, String specialUse) {
+			this.noselect = noselect;
+			this.hasChildren = hasChildren;
+			this.noinferiors = noinferiors;
+			this.specialUse = specialUse;
+		}
+
+		static Item of(MailStore.Entry e) {
+			return new Item(e.noselect, e.hasChildren, e.noinferiors, e.specialUse);
+		}
+	}
+
 	private void list(ImapRequestProcessor p, ImapRequest r, java.util.List<Pattern> regexes, Options o)
 			throws IOException {
 		MailStore store = p.getStore();
 		Set<String> subs = new TreeSet<>(store.readSubscriptions());
-		Map<String, MailStore.Entry> all = new LinkedHashMap<>();
+		Map<String, Item> all = new LinkedHashMap<>();
 		for (MailStore.Entry e : store.listAll()) {
-			all.put(e.name, e);
+			all.put(e.name, Item.of(e));
 		}
 		// other users' mailboxes the user may see (l), in the Other Users namespace
-		Map<String, String> otherRights = new LinkedHashMap<>();
-		Map<String, MailStore.Entry> others = others(p, otherRights);
-		boolean otherRoot = !others.isEmpty();
-		if (otherRoot && matches(regexes, ImapRequestProcessor.OTHER_USERS)
-				&& !(o.subscribed || o.specialUseOnly)) {
-			p.untagged("LIST (" + NOSELECT + " " + HAS_CHILDREN + ") \"" + DELIMITER + "\" "
-					+ p.mailboxName(ImapRequestProcessor.OTHER_USERS));
+		Map<String, Item> others = others(p);
+		if (!others.isEmpty() && !all.containsKey(ImapRequestProcessor.OTHER_USERS)) {
+			all.put(ImapRequestProcessor.OTHER_USERS, new Item(true, true, false, null));
 		}
-		all.putAll(others);
+		for (Map.Entry<String, Item> e : others.entrySet()) {
+			all.putIfAbsent(e.getKey(), e.getValue());
+		}
 		// the names to consider, in order
 		java.util.List<String> names = new ArrayList<>(all.keySet());
 		if (o.subscribed) {
@@ -203,7 +220,7 @@ public class List extends BaseCommand {
 		}
 		for (String name : names) {
 			boolean match = matches(regexes, name);
-			MailStore.Entry e = all.get(name);
+			Item e = all.get(name);
 			boolean subscribed = subs.contains(name);
 			String childInfo = null;
 			if (o.subscribed && !subscribed) {
@@ -239,10 +256,12 @@ public class List extends BaseCommand {
 			}
 			p.untagged("LIST " + ImapRequestProcessor.flagList(attrs) + " \"" + DELIMITER + "\" " + p.mailboxName(name)
 					+ (childInfo == null ? "" : " " + childInfo));
-			String rights = otherRights.get(name);
-			if (o.status != null && e != null && !e.noselect && (rights == null || rights.indexOf('r') >= 0)) {
+			if (o.status != null && e != null && !e.noselect) {
 				try {
-					p.untagged(Status.statusLine(p, name, o.status));
+					ImapRequestProcessor.MailboxRef ref = p.ref(name);
+					if (p.rights(ref).indexOf('r') >= 0) {
+						p.untagged(Status.statusLine(p, ref, o.status));
+					}
 				} catch (IOException ex) {
 					// the mailbox went away: no STATUS for it
 				}
@@ -252,23 +271,43 @@ public class List extends BaseCommand {
 
 	/**
 	 * The other users' mailboxes the user has l on, by their names here: the owners from the
-	 * share index, each mailbox's rights checked.
+	 * share index, each mailbox's rights checked. What LIST says comes only from what the user
+	 * may see: children are counted among the visible mailboxes, the owner's special uses are
+	 * left out, and an owner whose INBOX isn't visible appears as {@code Other Users/<owner>}
+	 * (\\Noselect) above the visible ones.
 	 */
-	static Map<String, MailStore.Entry> others(ImapRequestProcessor p, Map<String, String> rightsOut) throws IOException {
-		Map<String, MailStore.Entry> ret = new LinkedHashMap<>();
+	static Map<String, Item> others(ImapRequestProcessor p) throws IOException {
+		Map<String, Item> ret = new LinkedHashMap<>();
 		us.bringardner.parley.net.server.IPrincipal me = p.getPrincipal();
 		for (String owner : p.getImapServer().getShareIndex().ownersSharingWith(me.getName(), me.getGroups())) {
 			MailStore os = p.otherStore(owner);
 			if (os == null || os == p.getStore() || !os.getInboxDirectory().isDirectory()) {
 				continue;
 			}
+			Map<String, Boolean> visible = new LinkedHashMap<>();
 			for (MailStore.Entry e : os.listAll()) {
 				String name = ImapRequestProcessor.otherName(owner, e.name);
-				String rights = p.rights(p.ref(name));
-				if (rights.indexOf('l') >= 0) {
-					ret.put(name, e);
-					rightsOut.put(name, rights);
+				if (p.rights(p.ref(name)).indexOf('l') >= 0) {
+					visible.put(name, e.noselect);
 				}
+			}
+			if (visible.isEmpty()) {
+				continue;
+			}
+			String level = ImapRequestProcessor.otherName(owner, INBOX);
+			if (!visible.containsKey(level)) {
+				ret.put(level, new Item(true, true, false, null));
+			}
+			for (Map.Entry<String, Boolean> v : visible.entrySet()) {
+				String prefix = v.getKey() + DELIMITER;
+				boolean children = false;
+				for (String other : visible.keySet()) {
+					if (other.startsWith(prefix)) {
+						children = true;
+						break;
+					}
+				}
+				ret.put(v.getKey(), new Item(v.getValue(), children, false, null));
 			}
 		}
 		return ret;

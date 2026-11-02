@@ -40,21 +40,24 @@ final class AclSupport {
 	 * ({@code $sales@bringardner.us}) or a user the access control list knows; "-" before any
 	 * of them for a negative entry.
 	 *
-	 * @return null if it may, else why not
+	 * @return the identifier to store (a user as the access control list names it, so a
+	 * grant made with another spelling still matches the login), or null if it may not be given rights
 	 */
-	static String checkGrantee(ImapRequestProcessor p, String id) throws IOException {
-		String who = id.charAt(0) == MailboxAcl.NEGATIVE ? id.substring(1) : id;
+	static String grantee(ImapRequestProcessor p, String id) throws IOException {
+		boolean negative = id.charAt(0) == MailboxAcl.NEGATIVE;
+		String who = negative ? id.substring(1) : id;
 		if (who.equals(MailboxAcl.ANYONE)) {
-			return null;
+			return id;
 		}
 		if (who.charAt(0) == MailboxAcl.GROUP) {
 			String g = who.substring(1);
 			int at = g.indexOf('@');
-			return at > 0 && at < g.length() - 1 ? null : "A group is named with its domain, as $sales@example.com";
+			return at > 0 && at < g.length() - 1 ? id : null;
 		}
 		IAccessControlList acl = p.getServer().getAccessControl();
 		try {
-			return acl != null && acl.findPrincipal(who) != null ? null : "No such user";
+			us.bringardner.parley.net.server.IPrincipal u = acl == null ? null : acl.findPrincipal(who);
+			return u == null ? null : (negative ? "-" : "") + u.getName();
 		} catch (AccessControlUnavailableException e) {
 			throw new IOException("The users can't be read now: " + e.getMessage(), e);
 		}

@@ -53,15 +53,6 @@ public abstract class BaseCommand extends AbstractCommand implements ImapCommand
 		return states;
 	}
 
-	/** Replies NO [NOPERM] and returns false unless the user has WRITE. */
-	protected static boolean checkWrite(ImapRequestProcessor p, ImapRequest r) throws IOException {
-		if (!p.canWrite()) {
-			p.no(r, CODE_NOPERM, "Permission denied");
-			return false;
-		}
-		return true;
-	}
-
 	/** Replies NO [READ-ONLY] and returns false if the selected mailbox is read-only. */
 	protected static boolean checkReadWrite(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		if (p.getView().isReadOnly()) {

@@ -36,6 +36,8 @@ public class ListRights extends BaseCommand {
 		for (char c : MailboxAcl.minus(MailboxAcl.ALL, required).toCharArray()) {
 			sb.append(' ').append(c);
 		}
+		// the obsolete c and d, which can be granted (RFC 4314 section 2.1.1)
+		sb.append(" c d");
 		p.untagged(sb.toString());
 		p.ok(r, "LISTRIGHTS completed");
 	}

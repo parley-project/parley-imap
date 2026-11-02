@@ -46,8 +46,9 @@ public class Create extends BaseCommand {
 		r.end();
 		ImapRequestProcessor.MailboxRef ref = p.ref(name);
 		if (!ref.isMailbox()) {
+			// the same answer as for a user's mailbox that can't be seen: it doesn't tell who exists
 			p.no(r, ref.store == null && ref.local != null ? CODE_NONEXISTENT : CODE_CANNOT,
-					ref.local == null ? "That is the Other Users namespace" : "No such user");
+					ref.local == null ? "That is the Other Users namespace" : "No such mailbox");
 			return;
 		}
 		// k on the nearest existing parent (RFC 4314 section 4)
