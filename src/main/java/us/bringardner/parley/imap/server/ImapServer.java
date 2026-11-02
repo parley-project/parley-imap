@@ -111,8 +111,8 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	/**
-	 * Run IMAP (and IMAP with implicit TLS when parley.mail.imaps.port is set) until the process is
-	 * stopped; see parley-net's ServerMain.launch.
+	 * Run IMAP and IMAP with implicit TLS (skipped with a warning while it has no TLS key store) until
+	 * the process is stopped; see parley-net's ServerMain.launch.
 	 */
 	public static void main(String[] args) throws Exception {
 		ServerMain.launch("ImapServer", args, "imap", "imaps");

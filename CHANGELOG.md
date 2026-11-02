@@ -2,6 +2,12 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-01: parley.servers says which servers run, To-Do 2.12)
+
+- **`imaps` runs on 993 when `parley.servers` lists it** and it has a TLS key store (skipped with a warning while it
+  has none); `parley.mail.imaps.port` is only its port. **`parley.mail.imap.secure` is no longer read** (a warning
+  says so): it turned IMAP off and IMAPS on, two settings for one thing. `ImapServer.main` runs `imap` and `imaps`.
+
 ### Changed (2026-10-26: each server alone, shared assets carry their own settings)
 
 - **Each IMAP server reads its own settings under its own prefix**: `autologout`, `requireTls`, `appendLimit` and

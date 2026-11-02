@@ -21,20 +21,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import us.bringardner.parley.mail.server.MailServerProvider;
 import us.bringardner.parley.net.server.LaunchSettings;
 import us.bringardner.parley.net.server.ServerContext;
 import us.bringardner.parley.net.server.ServerLauncher;
 
 /**
  * The IMAP providers: found by the launcher, settings from parley-mail.properties then
- * parley-imap.properties, the suite's user file (parley.mail.users), imaps off unless its port is set.
+ * parley-imap.properties, the suite's user file (parley.mail.users), imaps skipped while it has no key
+ * store, and the 1.x secure flag only a warning.
  */
 public class TestImapProviders {
 
 	/** Settings other tests in this JVM set that would change what these see */
 	private static final String[] CLEARED = { "parley.mail.imap.authenticationProvider", "parley.mail.imap.userFile",
 			"parley.mail.imap.port", "parley.mail.imaps.port", "parley.mail.imap.secure", "parley.mail.users", "parley.mail.root",
-			"parley.mail.imap.keyStoreName" };
+			"parley.mail.imap.keyStoreName", "parley.mail.imaps.keyStoreName", "parley.mail.tls.keyStore" };
 
 	@TempDir
 	File dir;
@@ -91,7 +93,8 @@ public class TestImapProviders {
 		write("parley-imap.properties", "parley.mail.imap.port=" + port); // wins over the shared file
 		launcher = new ServerLauncher("ImapTest", new LaunchSettings(new Properties()), Arrays.asList("imap", "imaps"), dir, new ServerContext());
 		launcher.init();
-		assertEquals(ServerLauncher.State.OFF, launcher.getState("imaps"), "no imaps port: off");
+		assertEquals(ServerLauncher.State.OFF, launcher.getState("imaps"), "no key store: skipped");
+		assertTrue(launcher.getServer("imaps").getError().contains("key store"), launcher.getServer("imaps").getError());
 		launcher.startAll();
 		assertEquals(ServerLauncher.State.RUNNING, launcher.getState("imap"));
 		assertEquals(port, launcher.getServer("imap").getPort());
@@ -112,14 +115,28 @@ public class TestImapProviders {
 	}
 
 	@Test
-	public void legacySecureTurnsOnImapsOnly() throws Exception {
+	public void portIsOnlyAPort() throws Exception {
+		MailServerProvider imap = (MailServerProvider) ServerLauncher.providers().get("imap");
+		MailServerProvider imaps = (MailServerProvider) ServerLauncher.providers().get("imaps");
+		java.util.Properties c = new java.util.Properties();
+		assertEquals(143, imap.port(c));
+		assertEquals(993, imaps.port(c), "the standard port, not 0 (off)");
+		assertTrue(imap.unavailable(c) == null);
+		assertTrue(imaps.unavailable(c).contains("parley.mail.tls.keyStore"), imaps.unavailable(c));
+		c.setProperty("parley.mail.tls.keyStore", "keystore.p12");
+		assertTrue(imaps.unavailable(c) == null, "the suite's key store");
+		c.setProperty("parley.mail.imaps.port", "0");
+		assertTrue(imaps.unavailable(c).contains("parley.servers"), "port 0 no longer turns it off: " + imaps.unavailable(c));
+	}
+
+	@Test
+	public void secureFlagIsOnlyAWarning() throws Exception {
 		java.util.Properties c = new java.util.Properties();
 		c.setProperty("parley.mail.imap.secure", "true");
-		us.bringardner.parley.net.server.ServerProvider imap = ServerLauncher.providers().get("imap");
-		us.bringardner.parley.net.server.ServerProvider imaps = ServerLauncher.providers().get("imaps");
-		assertTrue(!imap.enabled(c));
-		assertTrue(imaps.enabled(c));
-		assertTrue(imap.enabled(new java.util.Properties()));
-		assertTrue(!imaps.enabled(new java.util.Properties()));
+		MailServerProvider imap = (MailServerProvider) ServerLauncher.providers().get("imap");
+		assertTrue(imap.enabled(c) && imap.unavailable(c) == null, "imap still runs");
+		assertEquals(143, imap.port(c));
+		assertEquals(1, imap.warnings(c).size());
+		assertTrue(imap.warnings(c).get(0).startsWith("parley.mail.imap.secure is no longer read"), imap.warnings(c).get(0));
 	}
 }
