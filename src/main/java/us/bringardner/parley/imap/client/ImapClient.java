@@ -1,7 +1,7 @@
 package us.bringardner.parley.imap.client;
 
 import us.bringardner.parley.mail.Sasl;
-import us.bringardner.parley.mail.SaslPrep;
+import us.bringardner.parley.net.sasl.SaslPrep;
 import us.bringardner.parley.net.capability.CapabilitySet;
 import us.bringardner.parley.net.sasl.ISaslClient;
 import us.bringardner.parley.net.sasl.SaslClients;

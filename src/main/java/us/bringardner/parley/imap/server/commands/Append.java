@@ -54,7 +54,14 @@ public class Append extends BaseCommand {
 		}
 		r.end();
 		ImapToken.Literal message = (ImapToken.Literal) t;
-		if (!checkWrite(p, r)) {
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		String rights = p.rights(ref);
+		if (rights.indexOf('i') < 0) {
+			if (ref.personal && (!ref.isMailbox() || ref.store.entry(ref.local) == null)) {
+				p.no(r, CODE_TRYCREATE, "No such mailbox");
+			} else {
+				p.noAccess(r, rights);
+			}
 			return;
 		}
 		if (message.length() == 0) {
@@ -63,16 +70,17 @@ public class Append extends BaseCommand {
 		}
 		Mailbox mb;
 		try {
-			mb = p.getStore().open(name);
+			mb = ref.store.open(ref.local);
 		} catch (MailStore.StoreException e) {
-			p.no(r, CODE_TRYCREATE, "No such mailbox");
+			p.no(r, ref.personal ? CODE_TRYCREATE : CODE_NONEXISTENT, "No such mailbox");
 			return;
 		}
 		MessageInfo added;
 		try (InputStream in = message.open()) {
-			added = mb.append(in, flags, date);
+			// flags the rights don't allow are left off; the APPEND still succeeds (RFC 4314 section 4)
+			added = mb.append(in, ImapRequestProcessor.allowedFlags(flags, rights), date);
 		} finally {
-			p.getStore().getRegistry().release(mb);
+			ref.store.getRegistry().release(mb);
 		}
 		p.ok(r, "APPENDUID " + mb.getUidValidity() + " " + added.getUid(), "APPEND completed");
 	}

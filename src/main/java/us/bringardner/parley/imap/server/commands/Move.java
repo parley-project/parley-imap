@@ -22,7 +22,15 @@ public class Move extends Copy {
 
 	@Override
 	protected boolean checkSource(ImapRequestProcessor p, ImapRequest r) throws IOException {
-		return checkReadWrite(p, r);
+		if (!checkReadWrite(p, r)) {
+			return false;
+		}
+		// MOVE takes the messages away: t and e on the source (RFC 6851 section 3.3)
+		if (!us.bringardner.parley.mail.store.MailboxAcl.has(p.getSelectedRights(), "te")) {
+			p.no(r, CODE_NOPERM, "Permission denied");
+			return false;
+		}
+		return true;
 	}
 
 	@Override

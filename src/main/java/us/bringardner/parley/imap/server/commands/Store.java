@@ -11,6 +11,7 @@ import us.bringardner.parley.imap.server.ImapRequest;
 import us.bringardner.parley.imap.server.ImapRequestProcessor;
 import us.bringardner.parley.imap.server.ImapToken;
 import us.bringardner.parley.mail.store.Mailbox;
+import us.bringardner.parley.mail.store.MailboxAcl;
 import us.bringardner.parley.mail.store.MailboxView;
 import us.bringardner.parley.mail.store.MessageInfo;
 
@@ -68,6 +69,13 @@ public class Store extends BaseCommand {
 		if (!checkReadWrite(p, r)) {
 			return;
 		}
+		String rights = p.getSelectedRights();
+		Set<String> allowed = ImapRequestProcessor.allowedFlags(flags, rights);
+		if (flags.isEmpty() ? op == Mailbox.FlagOp.SET && !MailboxAcl.hasAny(rights, "stw") : allowed.isEmpty()) {
+			// none of the flags may be changed (RFC 4314 section 4: fail only then)
+			p.no(r, CODE_NOPERM, "Permission denied");
+			return;
+		}
 		MailboxView view = p.getView();
 		Mailbox mb = view.getMailbox();
 		boolean missing = false;
@@ -77,7 +85,7 @@ public class Store extends BaseCommand {
 				missing = true;
 				continue;
 			}
-			Set<String> now = mb.storeFlags(m, op, flags, view);
+			Set<String> now = mb.storeFlags(m, op, op == Mailbox.FlagOp.SET ? keepFlags(mb, m, allowed, rights) : allowed, view);
 			if (now == null) {
 				missing = true;
 				continue;
@@ -94,5 +102,16 @@ public class Store extends BaseCommand {
 		} else {
 			p.ok(r, "STORE completed");
 		}
+	}
+
+	/** FLAGS (replace): the allowed flags asked for, and the message's flags the user may not change. */
+	static Set<String> keepFlags(Mailbox mb, MessageInfo m, Set<String> allowed, String rights) {
+		Set<String> ret = new java.util.LinkedHashSet<>(allowed);
+		for (String f : m.getFlags(mb)) {
+			if (!ImapRequestProcessor.mayChange(f, rights)) {
+				ret.add(f);
+			}
+		}
+		return ret;
 	}
 }

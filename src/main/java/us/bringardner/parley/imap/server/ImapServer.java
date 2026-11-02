@@ -12,6 +12,7 @@ import us.bringardner.parley.net.IProcessorFactory;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.mail.store.MailStore;
 import us.bringardner.parley.mail.store.MailboxRegistry;
+import us.bringardner.parley.mail.store.ShareIndex;
 
 /**
  * An IMAP server: IMAP4rev2 (RFC 9051), also speaking IMAP4rev1 (RFC 3501) to
@@ -24,6 +25,14 @@ import us.bringardner.parley.mail.store.MailboxRegistry;
  * {@link MailStore}). Users come from the access control list
  * ({@code parley.mail.imap.authenticationProvider}): READ is needed to log in, WRITE
  * to change anything.
+ * <p>
+ * Each mailbox has an access control list (RFC 4314, {@link us.bringardner.parley.mail.store.MailboxAcl}):
+ * SETACL, DELETEACL, GETACL, LISTRIGHTS and MYRIGHTS manage it, and every command checks the
+ * rights it needs. The server's permissions are a ceiling (no WRITE: read only everywhere).
+ * Mailboxes other users share are in the Other Users namespace,
+ * {@code Other Users/bob@bringardner.us/Projects} ({@code Other Users/bob@bringardner.us} is
+ * bob's INBOX); LIST shows one only where the user has the {@code l} right. A mail
+ * administrator (ADMIN) has no special rights here.
  */
 public class ImapServer extends AbstractMailServer implements IMAP {
 
@@ -181,11 +190,29 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		return dir;
 	}
 
-	/** The mail store of a user. */
+	/** The mail store of a user who logs in: made (with the default mailboxes) if it isn't there yet. */
 	public MailStore getMailStore(IPrincipal principal) throws IOException {
-		MailStore store = new MailStore(getInboxDirectory(principal), registry);
+		MailStore store = openMailStore(principal);
 		store.init(createDefaultMailboxes);
 		return store;
+	}
+
+	/**
+	 * Another user's mail store, as it is (nothing is made), for the Other Users namespace.
+	 * @since 2.0.0
+	 */
+	public MailStore openMailStore(IPrincipal principal) throws IOException {
+		MailStore store = new MailStore(getInboxDirectory(principal), registry, principal.getName());
+		store.setShareIndex(getShareIndex());
+		return store;
+	}
+
+	/**
+	 * The maildrop root's share index: which users' mailboxes are shared with whom (RFC 4314 ACLs).
+	 * @since 2.0.0
+	 */
+	public ShareIndex getShareIndex() throws IOException {
+		return new ShareIndex(getMaildropRoot(), registry);
 	}
 
 	// ------------------------------------------------------------------ settings

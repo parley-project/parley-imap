@@ -18,10 +18,13 @@ public class Delete extends BaseCommand {
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		String name = p.mailboxArg(r.nextAstring());
 		r.end();
-		if (!checkWrite(p, r)) {
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		String rights = p.rights(ref);
+		if (rights.indexOf('x') < 0) {
+			p.noAccess(r, rights);
 			return;
 		}
-		store(p).delete(name);
+		ref.store.delete(ref.local);
 		p.ok(r, "DELETE completed");
 	}
 }

@@ -182,6 +182,16 @@ public class List extends BaseCommand {
 		for (MailStore.Entry e : store.listAll()) {
 			all.put(e.name, e);
 		}
+		// other users' mailboxes the user may see (l), in the Other Users namespace
+		Map<String, String> otherRights = new LinkedHashMap<>();
+		Map<String, MailStore.Entry> others = others(p, otherRights);
+		boolean otherRoot = !others.isEmpty();
+		if (otherRoot && matches(regexes, ImapRequestProcessor.OTHER_USERS)
+				&& !(o.subscribed || o.specialUseOnly)) {
+			p.untagged("LIST (" + NOSELECT + " " + HAS_CHILDREN + ") \"" + DELIMITER + "\" "
+					+ p.mailboxName(ImapRequestProcessor.OTHER_USERS));
+		}
+		all.putAll(others);
 		// the names to consider, in order
 		java.util.List<String> names = new ArrayList<>(all.keySet());
 		if (o.subscribed) {
@@ -229,7 +239,8 @@ public class List extends BaseCommand {
 			}
 			p.untagged("LIST " + ImapRequestProcessor.flagList(attrs) + " \"" + DELIMITER + "\" " + p.mailboxName(name)
 					+ (childInfo == null ? "" : " " + childInfo));
-			if (o.status != null && e != null && !e.noselect) {
+			String rights = otherRights.get(name);
+			if (o.status != null && e != null && !e.noselect && (rights == null || rights.indexOf('r') >= 0)) {
 				try {
 					p.untagged(Status.statusLine(p, name, o.status));
 				} catch (IOException ex) {
@@ -237,6 +248,30 @@ public class List extends BaseCommand {
 				}
 			}
 		}
+	}
+
+	/**
+	 * The other users' mailboxes the user has l on, by their names here: the owners from the
+	 * share index, each mailbox's rights checked.
+	 */
+	static Map<String, MailStore.Entry> others(ImapRequestProcessor p, Map<String, String> rightsOut) throws IOException {
+		Map<String, MailStore.Entry> ret = new LinkedHashMap<>();
+		us.bringardner.parley.net.server.IPrincipal me = p.getPrincipal();
+		for (String owner : p.getImapServer().getShareIndex().ownersSharingWith(me.getName(), me.getGroups())) {
+			MailStore os = p.otherStore(owner);
+			if (os == null || os == p.getStore() || !os.getInboxDirectory().isDirectory()) {
+				continue;
+			}
+			for (MailStore.Entry e : os.listAll()) {
+				String name = ImapRequestProcessor.otherName(owner, e.name);
+				String rights = p.rights(p.ref(name));
+				if (rights.indexOf('l') >= 0) {
+					ret.put(name, e);
+					rightsOut.put(name, rights);
+				}
+			}
+		}
+		return ret;
 	}
 
 	private static boolean hasSubscribedChild(Set<String> subs, String name) {

@@ -34,6 +34,10 @@ public class Expunge extends BaseCommand {
 		if (!checkReadWrite(p, r)) {
 			return;
 		}
+		if (p.getSelectedRights().indexOf('e') < 0) {
+			p.no(r, CODE_NOPERM, "Permission denied");
+			return;
+		}
 		MailboxView view = p.getView();
 		Mailbox mb = view.getMailbox();
 		long uidValidity = mb.getUidValidity(); // before the UIDs are read

@@ -377,7 +377,7 @@ public class TestImapServer {
 			r = c.ok("LSUB \"\" \"*\"");
 			assertTrue(r.contains("* LSUB () \"/\" INBOX"), r.toString());
 			r = c.ok("NAMESPACE");
-			assertEquals("* NAMESPACE ((\"\" \"/\")) NIL NIL", r.get(0));
+			assertEquals("* NAMESPACE ((\"\" \"/\")) ((\"Other Users/\" \"/\")) NIL", r.get(0));
 			r = c.ok("LIST \"\" \"inbox\"");
 			assertEquals("* LIST (\\Noinferiors) \"/\" INBOX", r.get(0), "INBOX is case-insensitive");
 		}

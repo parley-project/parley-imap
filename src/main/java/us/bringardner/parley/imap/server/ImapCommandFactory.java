@@ -17,7 +17,12 @@ import us.bringardner.parley.imap.server.commands.Examine;
 import us.bringardner.parley.imap.server.commands.Expunge;
 import us.bringardner.parley.imap.server.commands.Fetch;
 import us.bringardner.parley.imap.server.commands.Idle;
+import us.bringardner.parley.imap.server.commands.DeleteAcl;
+import us.bringardner.parley.imap.server.commands.GetAcl;
+import us.bringardner.parley.imap.server.commands.ListRights;
 import us.bringardner.parley.imap.server.commands.Login;
+import us.bringardner.parley.imap.server.commands.MyRights;
+import us.bringardner.parley.imap.server.commands.SetAcl;
 import us.bringardner.parley.imap.server.commands.Logout;
 import us.bringardner.parley.imap.server.commands.Lsub;
 import us.bringardner.parley.imap.server.commands.Move;
@@ -68,6 +73,12 @@ public class ImapCommandFactory extends AbstractCommandFactory {
 		addCommand(new Status());
 		addCommand(new Append());
 		addCommand(new Idle());
+		// access control (RFC 4314)
+		addCommand(new SetAcl());
+		addCommand(new DeleteAcl());
+		addCommand(new GetAcl());
+		addCommand(new ListRights());
+		addCommand(new MyRights());
 		// selected (6.4)
 		addCommand(new Check());
 		addCommand(new Close());

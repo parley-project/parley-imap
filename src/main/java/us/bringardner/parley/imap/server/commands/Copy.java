@@ -35,7 +35,17 @@ public class Copy extends BaseCommand {
 		String name = p.mailboxArg(r.nextAstring());
 		r.end();
 		List<Long> uids = p.resolve(set, r.isUid());
-		if (!checkWrite(p, r) || !checkSource(p, r)) {
+		if (!checkSource(p, r)) {
+			return;
+		}
+		ImapRequestProcessor.MailboxRef ref = p.ref(name);
+		String rights = p.rights(ref);
+		if (rights.indexOf('i') < 0) {
+			if (ref.personal && (!ref.isMailbox() || ref.store.entry(ref.local) == null)) {
+				p.no(r, CODE_TRYCREATE, "No such mailbox");
+			} else {
+				p.noAccess(r, rights);
+			}
 			return;
 		}
 		Mailbox source = p.getView().getMailbox();
@@ -52,13 +62,14 @@ public class Copy extends BaseCommand {
 		}
 		Mailbox target;
 		try {
-			target = p.getStore().open(name);
+			target = ref.store.open(ref.local);
 		} catch (MailStore.StoreException e) {
-			p.no(r, CODE_TRYCREATE, "No such mailbox");
+			p.no(r, ref.personal ? CODE_TRYCREATE : CODE_NONEXISTENT, "No such mailbox");
 			return;
 		}
 		try {
 			List<MessageInfo> added = transfer(p, source, target, list);
+			dropFlags(target, added, rights);
 			String code = null;
 			if (!added.isEmpty()) {
 				List<Long> from = new ArrayList<>();
@@ -72,8 +83,27 @@ public class Copy extends BaseCommand {
 			}
 			done(p, r, code);
 		} finally {
-			p.getStore().getRegistry().release(target);
+			ref.store.getRegistry().release(target);
 		}
+	}
+
+	/** Take off the copies the flags the rights on the target don't allow (RFC 4314 section 4). */
+	static void dropFlags(Mailbox target, List<MessageInfo> added, String rights) throws IOException {
+		if (rights.indexOf('s') >= 0 && rights.indexOf('t') >= 0 && rights.indexOf('w') >= 0) {
+			return;
+		}
+		for (MessageInfo m : added) {
+			java.util.Set<String> drop = new java.util.LinkedHashSet<>();
+			for (String f : m.getFlags(target)) {
+				if (!ImapRequestProcessor.mayChange(f, rights)) {
+					drop.add(f);
+				}
+			}
+			if (!drop.isEmpty()) {
+				target.storeFlags(m, Mailbox.FlagOp.REMOVE, drop, null);
+			}
+		}
+		target.saveIfDirty();
 	}
 
 	protected boolean checkSource(ImapRequestProcessor p, ImapRequest r) throws IOException {

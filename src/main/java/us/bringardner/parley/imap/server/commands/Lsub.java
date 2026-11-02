@@ -29,7 +29,17 @@ public class Lsub extends BaseCommand {
 			if (!List.matches(regexes, name)) {
 				continue;
 			}
-			MailStore.Entry e = store.entry(name);
+			MailStore.Entry e;
+			if (ImapRequestProcessor.isOtherUsers(name)) {
+				// another user's: only where the user may see it
+				ImapRequestProcessor.MailboxRef ref = p.ref(name);
+				if (p.rights(ref).indexOf('l') < 0) {
+					continue;
+				}
+				e = ref.store.entry(ref.local);
+			} else {
+				e = store.entry(name);
+			}
 			String attrs = e == null || e.noselect ? "(" + NOSELECT + ")" : "()";
 			p.untagged("LSUB " + attrs + " \"" + DELIMITER + "\" " + p.mailboxName(name));
 		}

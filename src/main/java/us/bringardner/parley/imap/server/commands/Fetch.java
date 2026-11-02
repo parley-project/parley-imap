@@ -50,7 +50,8 @@ public class Fetch extends BaseCommand {
 		List<Long> uids = p.resolve(set, r.isUid());
 		MailboxView view = p.getView();
 		Mailbox mb = view.getMailbox();
-		boolean seen = fetch.setsSeen() && !view.isReadOnly();
+		// \Seen is set only with the s right (RFC 4314 section 4)
+		boolean seen = fetch.setsSeen() && !view.isReadOnly() && p.getSelectedRights().indexOf('s') >= 0;
 		boolean missing = false;
 		for (long uid : uids) {
 			MessageInfo m = mb.get(uid);
