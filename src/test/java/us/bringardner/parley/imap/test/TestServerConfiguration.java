@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import us.bringardner.parley.imap.server.ImapServer;
-import us.bringardner.parley.mail.server.AbstractMailServer;
 
 /**
  * IMAP servers in one JVM, each made from its own configuration: the same name gets each server's
@@ -31,7 +30,7 @@ public class TestServerConfiguration {
 	}
 
 	private static ImapServer make(Properties c, boolean secure) throws Exception {
-		return AbstractMailServer.makeIn(null, c, () -> new ImapServer(0, ImapServer.IMAP_NAME, secure));
+		return us.bringardner.parley.core.BaseObject.makeWith(c, () -> new ImapServer(0, ImapServer.IMAP_NAME, secure));
 	}
 
 	@Test
