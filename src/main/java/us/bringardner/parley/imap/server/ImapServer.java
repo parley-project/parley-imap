@@ -131,11 +131,11 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 			java.util.List<ServerMain.Service> ret = new java.util.ArrayList<>();
 			{
 				int p = standalonePort(IMAP_PREFIX, IMAP.IMAP_PORT);
-				ret.add(ServerMain.service(new ImapServer(p, IMAP_NAME, false), "IMAP server"));
+				ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, false), "IMAP server", "imap"));
 			}
 			if (hasKeyStore(IMAPS_PREFIX)) {
 				int p = standalonePort(IMAPS_PREFIX, IMAP.IMAPS_PORT);
-				ret.add(ServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)"));
+				ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)", "imaps"));
 			} else {
 				System.err.println("Warning: IMAP server (implicit TLS) is skipped: no TLS key store (set " + MAIL_TLS_KEY_STORE_PROP + " or " + IMAPS_PREFIX + ".keyStoreName)");
 			}

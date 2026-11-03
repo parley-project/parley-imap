@@ -21,7 +21,6 @@ import us.bringardner.parley.imap.server.ImapServer;
 import us.bringardner.parley.mail.store.MailLocks;
 import us.bringardner.parley.net.lock.Sharing;
 import us.bringardner.parley.net.server.KnownSettings;
-import us.bringardner.parley.net.server.ServerContext;
 import us.bringardner.parley.net.server.ServerMain;
 
 /**
