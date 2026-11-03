@@ -18,12 +18,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.imap.server.ImapServer;
-import us.bringardner.parley.mail.server.MailServerProvider;
 import us.bringardner.parley.mail.store.MailLocks;
 import us.bringardner.parley.net.lock.Sharing;
 import us.bringardner.parley.net.server.KnownSettings;
 import us.bringardner.parley.net.server.ServerContext;
-import us.bringardner.parley.net.server.ServerLauncher;
 import us.bringardner.parley.net.server.ServerMain;
 
 /**
@@ -41,38 +39,6 @@ public class TestKnownSettings {
 		assertEquals(List.of(), KnownSettings.load().undeclared(KnownSettings.settingConstants(ImapServer.class)));
 	}
 
-	@Test
-	public void everyNameTheServersReadIsListed() throws Exception {
-		KnownSettings k = KnownSettings.load();
-		assertTrue(k.prefixes().containsAll(List.of(ImapServer.IMAP_PREFIX, ImapServer.IMAPS_PREFIX)), k.prefixes().toString());
-		File mail = new File(dir, "mail");
-		MailLocks.writeStoreSettings(FileSourceFactory.getDefaultFactory().createFileSource(mail.getPath()), Sharing.OFF);
-		File users = new File(dir, "users.txt");
-		Files.write(users.toPath(), "tony , secret , READ|WRITE\n".getBytes(StandardCharsets.UTF_8));
-
-		for (String id : List.of("imap", "imaps")) {
-			KnownSettings.RecordingProperties c = new KnownSettings.RecordingProperties();
-			c.setProperty("parley.mail.root", mail.getPath());
-			c.setProperty("parley.mail.users", users.getPath());
-			MailServerProvider p = (MailServerProvider) ServerLauncher.providers().get(id);
-			int port = freePort();
-			c.setProperty(p.prefix() + ".port", "" + port);
-			p.enabled(c);
-			p.unavailable(c);
-			p.warnings(c);
-			p.port(c);
-			if (!p.implicitTls()) {
-				ServerMain.Service s = p.create(new ServerContext(), c);
-				s.startAndWait(5000);
-				try {
-					session(port);
-				} finally {
-					s.stop(5000);
-				}
-			}
-			assertEquals(List.of(), k.undeclared(c.asked()), id + " read these");
-		}
-	}
 
 	private static void session(int port) throws Exception {
 		try (Socket s = new Socket("127.0.0.1", port)) {

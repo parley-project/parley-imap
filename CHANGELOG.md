@@ -2,6 +2,14 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+
+### Changed (2026-11-03: the launcher moved to parley-mail-admin)
+
+- **`ImapProviders` (the providers imap, imaps) moved to parley-mail-admin** with the launcher, which runs the mail suite; this module
+  registers no server providers. Its `main` runs its servers alone in one process with parley-net's `ServerMain.run`
+  (its settings file and the command line, as system properties; the implicit TLS server only when there is a TLS
+  key store), not through the launcher.
+
 ### Changed (2026-11-02: COPY and MOVE flags, To-Do 3.6)
 
 - **COPY and MOVE make the copies with only the flags the rights on the target allow** (RFC 4314 section 4), through

@@ -42,7 +42,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	public static final String IMAP_PREFIX = "parley.mail.imap";
 	/** The prefix of the properties of an IMAP server with implicit TLS (port 993). */
 	public static final String IMAPS_PREFIX = "parley.mail.imaps";
-	/** A settings file for the server's configuration (see parley-net's ServerLauncher). */
+	/** A settings file for the server's configuration (the file its main reads, or a launcher's). */
 	public static final String CONFIG_PROP = IMAP_PREFIX + ".configFile";
 	/** The maildrop root, shared with POP3 and SMTP so the servers share mail. */
 	public static final String ROOT_PROP = MAIL_ROOT_PROP;
@@ -120,11 +120,40 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	/**
-	 * Run IMAP and IMAP with implicit TLS (skipped with a warning while it has no TLS key store) until
-	 * the process is stopped; see parley-net's ServerMain.launch.
+	 * Run IMAP (parley.mail.imap.port, default 143) and, when there is a TLS key store, IMAP with
+	 * implicit TLS (parley.mail.imaps.port, default 993) in this process until it is stopped, with
+	 * parley-net's ServerMain.run: the settings are parley-imap.properties in the settings folder (or
+	 * the file parley.mail.imap.configFile names) and the command line, read as system properties.
+	 * (The mail suite's servers are run by parley-mail-admin's launcher.)
 	 */
 	public static void main(String[] args) throws Exception {
-		ServerMain.launch("ImapServer", args, "imap", "imaps");
+		ServerMain.run("ImapServer", args, CONFIG_PROP, "parley-imap.properties", () -> {
+			java.util.List<ServerMain.Service> ret = new java.util.ArrayList<>();
+			{
+				int p = standalonePort(IMAP_PREFIX, IMAP.IMAP_PORT);
+				ret.add(ServerMain.service(new ImapServer(p, IMAP_NAME, false), "IMAP server"));
+			}
+			if (hasKeyStore(IMAPS_PREFIX)) {
+				int p = standalonePort(IMAPS_PREFIX, IMAP.IMAPS_PORT);
+				ret.add(ServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)"));
+			} else {
+				System.err.println("Warning: IMAP server (implicit TLS) is skipped: no TLS key store (set " + MAIL_TLS_KEY_STORE_PROP + " or " + IMAPS_PREFIX + ".keyStoreName)");
+			}
+			return ret;
+		});
+	}
+
+	/** A server's port in a standalone process: {@code <prefix>.port}, else its standard port */
+	private static int standalonePort(String prefix, int standard) {
+		String v = System.getProperty(prefix + ".port");
+		return v == null || v.trim().isEmpty() ? standard : Integer.parseInt(v.trim());
+	}
+
+	/** A TLS key store for this server in a standalone process: the suite's, or its own */
+	private static boolean hasKeyStore(String prefix) {
+		String a = System.getProperty(MAIL_TLS_KEY_STORE_PROP);
+		String b = System.getProperty(prefix + ".keyStoreName");
+		return (a != null && !a.trim().isEmpty()) || (b != null && !b.trim().isEmpty());
 	}
 
 	private void initMe() {

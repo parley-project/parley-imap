@@ -60,11 +60,11 @@ only adds messages with APPEND, COPY and MOVE.
 
 Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -Dparley.mail.imap.port=1143 -Dparley.mail.root=/var/mail/pop3`
 
-`ImapServer.main` runs `imap` and `imaps` (with implicit TLS; skipped with a warning while it has no TLS key store), with
-parley-net's `ServerMain.launch`: settings from `parley-mail.properties` then `parley-imap.properties` in
-the settings folder, the JVM's `-D` options and the command line; a JMX bean per server. To run IMAP
-with other servers in one process, use the providers `imap` and `imaps` (`ImapProviders`) with
-parley-net's launcher; see parley-mail's README.
+`ImapServer.main` runs IMAP and, when there is a TLS key store, IMAP with implicit TLS (skipped with a
+warning otherwise), with parley-net's `ServerMain.run`: settings from `parley-imap.properties` in the
+settings folder (or the file `parley.mail.imap.configFile` names), the JVM's `-D` options and the
+command line, as system properties. To run IMAP with other servers in one process, use the mail
+suite's launcher in parley-mail-admin (ids `imap`, `imaps`; see parley-mail's README).
 
 ### Protocol support
 
