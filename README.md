@@ -63,8 +63,9 @@ Or from the command line: `java us.bringardner.parley.imap.server.ImapServer -Dp
 `ImapServer.main` runs IMAP and, when there is a TLS key store, IMAP with implicit TLS (skipped with a
 warning otherwise), with parley-net's `ServerMain.run`: settings from `parley-imap.properties` in the
 settings folder (or the file `parley.mail.imap.configFile` names), the JVM's `-D` options and the
-command line, as system properties. To run IMAP with other servers in one process, use the mail
-suite's launcher in parley-mail-admin (ids `imap`, `imaps`; see parley-mail's README).
+command line, as system properties. While they run, their stores are the JMX beans
+`us.bringardner.parley:type=MailStore,name=imap` and `imaps`. Running IMAP with other servers in one
+process is an application's job (see parley-mail's README; parley-mail-admin is an example).
 
 ### Protocol support
 
@@ -111,7 +112,7 @@ STORE `s` for `\Seen`, `t` for `\Deleted`, `w` for the others (it fails only whe
 expunges only with it); a FETCH sets `\Seen` only with `s`. A mailbox the user has neither `l` nor the right asked for
 on answers `NO [NONEXISTENT]`, so its existence isn't told; with `l`, `NO [NOPERM]`. SELECT reports READ-ONLY when the
 rights allow no change, and PERMANENTFLAGS lists only the flags the user may change. Rights are read when a mailbox
-is selected. A mail administrator (ADMIN) has no special rights here (changing other users' ACLs in parley-mail-admin is still to come). SETACL stores a user as the access control list names them, so another spelling of the name still matches the login.
+is selected. A mail administrator (ADMIN) has no special rights here. SETACL stores a user as the access control list names them, so another spelling of the name still matches the login.
 
 NAMESPACE offers the Personal namespace and **Other Users** (`Other Users/`): `Other Users/bob@bringardner.us/Projects`
 is bob's Projects and `Other Users/bob@bringardner.us` bob's INBOX. LIST shows another user's mailbox only where the
