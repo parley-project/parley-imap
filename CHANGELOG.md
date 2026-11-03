@@ -3,6 +3,12 @@
 ## parley-imap 2.0.0 (unreleased)
 
 
+### Changed (2026-11-03: To-Do 15.3)
+
+- **`main` registers each server's store bean**: while they run, the servers `main` runs have their stores as
+  `us.bringardner.parley:type=MailStore,name=<id>` (imap, imaps) on the platform MBean server (parley-mail's
+  `MailServerMain`), so their mailbox ACLs can be managed without an application.
+
 ### Changed (2026-11-03: the launcher moved to parley-mail-admin)
 
 - **`ImapProviders` (the providers imap, imaps) moved to parley-mail-admin** with the launcher, which runs the mail suite; this module

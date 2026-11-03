@@ -124,7 +124,8 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	 * implicit TLS (parley.mail.imaps.port, default 993) in this process until it is stopped, with
 	 * parley-net's ServerMain.run: the settings are parley-imap.properties in the settings folder (or
 	 * the file parley.mail.imap.configFile names) and the command line, read as system properties.
-	 * (The mail suite's servers are run by parley-mail-admin's launcher.)
+	 * Each server's store is the JMX bean us.bringardner.parley:type=MailStore,name=<its id> while it
+	 * runs (MailServerMain).
 	 */
 	public static void main(String[] args) throws Exception {
 		ServerMain.run("ImapServer", args, CONFIG_PROP, "parley-imap.properties", () -> {
