@@ -113,7 +113,11 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		} catch (ConnectionLostException | SocketException e) {
 			// the client went away
 		} catch (Throwable e) {
-			logError("An error occurred in the IMAP session; closing the connection.", e);
+			if (isTlsHandshakeFailure(e)) {
+				logTlsHandshakeFailure(e);
+			} else {
+				logError("An error occurred in the IMAP session; closing the connection.", e);
+			}
 		} finally {
 			deselect();
 			running = false;
@@ -256,6 +260,11 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		} catch (MailStore.StoreException e) {
 			no(req, e.getCode(), e.getMessage());
 		} catch (IOException e) {
+			if (isTlsHandshakeFailure(e)) {
+				// STARTTLS: the client's handshake failed, and there's no connection left to answer on
+				logTlsHandshakeFailure(e);
+				throw new ConnectionLostException(e);
+			}
 			logError("Error in " + cmd.getName(), e);
 			no(req, CODE_UNAVAILABLE, "The mail store can't do that now: " + e.getMessage());
 		} catch (RuntimeException e) {
