@@ -780,7 +780,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	/**
 	 * The names of the logged-in user's groups, for {@code $group} entries in mailbox ACLs:
-	 * parley-mail's {@code findGroupNames} (the registry's {@code findGroups}, when it has one),
+	 * parley-mail's {@code findGroupNames} (the user registry's {@code findGroups}),
 	 * read once a session.
 	 *
 	 * @throws UserRegistryUnavailableException when the user registry can't answer now

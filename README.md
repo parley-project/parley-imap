@@ -114,7 +114,7 @@ STORE `s` for `\Seen`, `t` for `\Deleted`, `w` for the others (it fails only whe
 expunges only with it); a FETCH sets `\Seen` only with `s`. A mailbox the user has neither `l` nor the right asked for
 on answers `NO [NONEXISTENT]`, so its existence isn't told; with `l`, `NO [NOPERM]`. SELECT reports READ-ONLY when the
 rights allow no change, and PERMANENTFLAGS lists only the flags the user may change. Rights are read when a mailbox
-is selected. A mail administrator (`admin`) has no special rights here. SETACL stores a user as the user registry names them, so another spelling of the name still matches the login. A user's groups come from the registry's own `findGroups` (`FileUserRegistry`'s `groups=` field; parley-iam's `UserRegistry` has no group lookup, so a registry without one gives no groups) and are read once a session.
+is selected. A mail administrator (`admin`) has no special rights here. SETACL stores a user as the user registry names them, so another spelling of the name still matches the login. A user's groups come from the user registry's `findGroups` (`FileUserRegistry`'s `groups=` field; a registry without groups gives none) and are read once a session.
 
 NAMESPACE offers the Personal namespace and **Other Users** (`Other Users/`): `Other Users/bob@bringardner.us/Projects`
 is bob's Projects and `Other Users/bob@bringardner.us` bob's INBOX. LIST shows another user's mailbox only where the

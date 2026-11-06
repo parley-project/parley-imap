@@ -26,8 +26,8 @@
   as in POP3.
 - **`ImapRequestProcessor.logout()` is now `endSession()`** (LOGOUT, too many failed logins): parley-net's session has
   a final `logout()` of its own, which logs the user out; `endSession()` calls it.
-- **Groups for `$group` ACL entries** come from parley-mail's `AbstractMailServer.findGroupNames` (the registry's own
-  `findGroups`, when it has one), read once a session (`groupNames()`). The mailbox ACL rules are unchanged: groups
+- **Groups for `$group` ACL entries** come from parley-mail's `AbstractMailServer.findGroupNames` (the user registry's
+  `findGroups`), read once a session (`groupNames()`). The mailbox ACL rules are unchanged: groups
   with their domain, `anyone`, the owner keeps `l` and `a`, the `.imap-shares` index.
 - **The `maildrop` setting is a principal attribute**; `ImapServer.getInboxDirectory`, `getMailStore` and
   `openMailStore` take a `ParleyPrincipal`.
