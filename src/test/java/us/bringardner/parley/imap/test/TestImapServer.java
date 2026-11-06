@@ -35,8 +35,7 @@ import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.net.sasl.ISaslClient;
 import us.bringardner.parley.net.sasl.ScramMechanism;
-import us.bringardner.parley.net.server.FileBasedAcl;
-import us.bringardner.parley.net.server.IAccessControlList;
+import us.bringardner.parley.net.server.FileUserRegistry;
 import us.bringardner.parley.net.server.IServer;
 import us.bringardner.parley.imap.server.ImapServer;
 import us.bringardner.parley.net.ServerTestSupport;
@@ -61,8 +60,8 @@ public class TestImapServer {
 			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
 			System.setProperty(prefix + ".keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 			System.setProperty(prefix + ".keyStoreType", "PKCS12");
-			System.setProperty(prefix + "." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
-			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+			System.setProperty(prefix + "." + FileUserRegistry.PROP_FILE_NAME, ACL_FILE);
+			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileUserRegistry.class.getName());
 		}
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imaptest");
 		us.bringardner.parley.mail.store.MailLocks.writeStoreSettings(root, us.bringardner.parley.net.lock.Sharing.OFF);
@@ -265,8 +264,7 @@ public class TestImapServer {
 			assertFalse(caps.contains("SCRAM"), caps);
 			assertTrue(tagged(c.cmd("AUTHENTICATE SCRAM-SHA-256")).contains("NO"));
 		}
-		IAccessControlList old = server.getAccessControl();
-		server.setAccessControl(scramAcl());
+		server.setUserRegistry(scramAcl());
 		try {
 			reset("carol");
 			try (ImapClient c = connect()) {
@@ -292,14 +290,14 @@ public class TestImapServer {
 				c.ok("AUTHENTICATE PLAIN " + Base64.getEncoder().encodeToString(bytes("\0carol\0carolpw")));
 			}
 		} finally {
-			server.setAccessControl(old);
+			// back to the registry made from the test settings
+			server.setUserRegistry(null);
 		}
 	}
 
 	@Test
 	public void testAccessControlUnavailable() throws Exception {
-		IAccessControlList old = server.getAccessControl();
-		server.setAccessControl(downAcl());
+		server.setUserRegistry(downAcl());
 		us.bringardner.parley.core.ILogger.Level level = server.getLogger().getLevel();
 		server.getLogger().setLevel(Level.NONE);
 		try (ImapClient c = connect()) {
@@ -313,7 +311,8 @@ public class TestImapServer {
 			reply = scram(c, ScramMechanism.SHA_256, "tony", "secret");
 			assertTrue(reply.startsWith("s1 NO [UNAVAILABLE]"), reply);
 		} finally {
-			server.setAccessControl(old);
+			// back to the registry made from the test settings
+			server.setUserRegistry(null);
 			server.getLogger().setLevel(level);
 		}
 	}
@@ -918,6 +917,44 @@ public class TestImapServer {
 			assertEquals(total, n[0]);
 			assertTrue(MessageDigest.isEqual(sent.digest(), got.digest()), "content survives the round trip");
 			assertEquals("* SEARCH 1", c.ok("SEARCH BODY \"see attached\"").get(0));
+		}
+	}
+
+	/** A wrong SCRAM proof never reaches the registry's password check, but it is a failed login all the same. */
+	@Test
+	public void testWrongScramProofIsCounted() throws Exception {
+		server.setUserRegistry(scramAcl());
+		server.setMaxLoginAttempts(2);
+		try (ImapClient c = connect()) {
+			String reply = scram(c, ScramMechanism.SHA_256, "carol", "wrong");
+			assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
+			reply = scram(c, ScramMechanism.SHA_256, "carol", "wrong2");
+			assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
+			assertEquals("* BYE Too many failed logins", c.readLine());
+			assertNull(c.readLine(), "closed after 2 failures");
+		} finally {
+			server.setMaxLoginAttempts(3);
+			server.setUserRegistry(null);
+		}
+	}
+
+	/** A permission or user the registry can't read after login is NO [UNAVAILABLE], never a denial. */
+	@Test
+	public void testPermissionUnavailable() throws Exception {
+		reset("tony");
+		us.bringardner.parley.core.ILogger.Level level = server.getLogger().getLevel();
+		try (ImapClient c = login("tony", "secret")) {
+			server.getLogger().setLevel(Level.NONE);
+			server.setUserRegistry(downAcl());
+			String reply = tagged(c.cmd("SELECT INBOX"));
+			assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
+			reply = tagged(c.cmd("MYRIGHTS \"Other Users/reader\""));
+			assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
+			server.setUserRegistry(null);
+			c.ok("SELECT INBOX");
+		} finally {
+			server.setUserRegistry(null);
+			server.getLogger().setLevel(level);
 		}
 	}
 

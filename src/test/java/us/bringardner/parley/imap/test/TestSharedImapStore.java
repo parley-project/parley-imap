@@ -21,7 +21,7 @@ import us.bringardner.parley.mail.store.AnotherServer;
 import us.bringardner.parley.mail.store.MailLocks;
 import us.bringardner.parley.mail.store.Mailbox;
 import us.bringardner.parley.mail.store.MessageInfo;
-import us.bringardner.parley.net.server.FileBasedAcl;
+import us.bringardner.parley.net.server.FileUserRegistry;
 import us.bringardner.parley.net.server.IServer;
 import us.bringardner.parley.net.ServerTestSupport;
 
@@ -39,8 +39,8 @@ public class TestSharedImapStore {
 		System.setProperty("parley.mail.imap.keyStoreName", keystore);
 		System.setProperty("parley.mail.imap.keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("parley.mail.imap.keyStoreType", "PKCS12");
-		System.setProperty("parley.mail.imap." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
-		System.setProperty("parley.mail.imap." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+		System.setProperty("parley.mail.imap." + FileUserRegistry.PROP_FILE_NAME, ACL_FILE);
+		System.setProperty("parley.mail.imap." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileUserRegistry.class.getName());
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapshared");
 		MailLocks.writeStoreSettings(root, us.bringardner.parley.net.lock.Sharing.CLUSTER); // the store's own settings
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);

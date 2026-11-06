@@ -2,6 +2,38 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-06: users, logins and permissions come from parley-iam)
+
+- **parley-imap uses parley-iam and the new parley-net**: users, logins and permissions come from the server's
+  parley-iam `UserRegistry` (`authenticationProvider`, `parley.mail.users`, or `setUserRegistry`). With no registry a
+  login is a configuration error (`IllegalStateException` naming the setting), not a refused login.
+- **`ImapCommand.READ_PERMISSION` / `WRITE_PERMISSION` are `ParleyPermission`s** (`read`, `write` on the server as a
+  whole); `BaseCommand.getPermission()` returns `ParleyPermission`. The registry decides them.
+- **A registry that can't answer is `NO [UNAVAILABLE]`** (RFC 5530) for a login, a permission check, a user lookup
+  (Other Users, SETACL) or a group lookup; never `NO [AUTHENTICATIONFAILED]` or a denial, and not counted.
+  `canRead()` and `canWrite()` now throw `UserRegistryUnavailableException` (an `IOException`).
+- **Logins go through the session's `authenticate`** (parley-mail's `authenticate(user, password)`):
+  - `LOGIN` and `AUTHENTICATE PLAIN` check the password with the registry, then `read`, then open the mail store; a
+    session that can't finish logging in is logged out again.
+  - `loginVerified(String)` is now `loginVerified(ImapSaslAuthenticator, String)`: SCRAM is verified by the
+    authenticator that ran the exchange.
+  - `ImapSaslAuthenticator` extends parley-mail's `MailSaslAuthenticator` (PLAIN, SCRAM-SHA-256, SCRAM-SHA-1);
+    `newSaslAuthenticator()` returns one. A failed exchange that checked no password goes through `exchangeFailed`,
+    so a wrong SCRAM proof is counted.
+- **Failed logins are counted and delayed by parley-net** (`loginFailureDelay`, `maxLoginAttempts`); IMAP's own
+  counting and delays are removed. After the last one the session still says `* BYE Too many failed logins`
+  (`replyTooManyLoginFailures`). A user without `read` (`NO [AUTHORIZATIONFAILED]`) is now counted as a failed login,
+  as in POP3.
+- **`ImapRequestProcessor.logout()` is now `endSession()`** (LOGOUT, too many failed logins): parley-net's session has
+  a final `logout()` of its own, which logs the user out; `endSession()` calls it.
+- **Groups for `$group` ACL entries** come from parley-mail's `AbstractMailServer.findGroupNames` (the user registry's
+  `findGroups`), read once a session (`groupNames()`). The mailbox ACL rules are unchanged: groups
+  with their domain, `anyone`, the owner keeps `l` and `a`, the `.imap-shares` index.
+- **The `maildrop` setting is a principal attribute**; `ImapServer.getInboxDirectory`, `getMailStore` and
+  `openMailStore` take a `ParleyPrincipal`.
+- **Tests** use `FileUserRegistry` and `setUserRegistry`; new tests cover counting of wrong SCRAM proofs and
+  `NO [UNAVAILABLE]` for permission and user lookups after login.
+
 
 ### Changed (2026-11-03: To-Do 15.3)
 

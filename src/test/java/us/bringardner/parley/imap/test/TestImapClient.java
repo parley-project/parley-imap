@@ -45,7 +45,7 @@ import us.bringardner.parley.core.ILogger.Level;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.mail.Message;
-import us.bringardner.parley.net.server.FileBasedAcl;
+import us.bringardner.parley.net.server.FileUserRegistry;
 import us.bringardner.parley.net.server.IServer;
 import us.bringardner.parley.imap.client.BodyPart;
 import us.bringardner.parley.imap.client.Envelope;
@@ -86,8 +86,8 @@ public class TestImapClient {
 			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
 			System.setProperty(prefix + ".keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 			System.setProperty(prefix + ".keyStoreType", "PKCS12");
-			System.setProperty(prefix + "." + FileBasedAcl.PROP_FILE_NAME, ACL_FILE);
-			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileBasedAcl.class.getName());
+			System.setProperty(prefix + "." + FileUserRegistry.PROP_FILE_NAME, ACL_FILE);
+			System.setProperty(prefix + "." + IServer.AUTHENTICATION_PROVIDER_PROPERTY, FileUserRegistry.class.getName());
 		}
 		root = FileSourceFactory.getDefaultFactory().createTempDirectory("imapclienttest");
 		// two servers use it (IMAP and IMAPS): the store says it is shared

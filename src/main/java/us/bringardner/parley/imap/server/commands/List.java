@@ -278,8 +278,8 @@ public class List extends BaseCommand {
 	 */
 	static Map<String, Item> others(ImapRequestProcessor p) throws IOException {
 		Map<String, Item> ret = new LinkedHashMap<>();
-		us.bringardner.parley.net.server.IPrincipal me = p.getPrincipal();
-		for (String owner : p.getImapServer().getShareIndex().ownersSharingWith(me.getName(), me.getGroups())) {
+		us.bringardner.parley.iam.ParleyPrincipal me = p.getPrincipal();
+		for (String owner : p.getImapServer().getShareIndex().ownersSharingWith(me.getName(), p.groupNames())) {
 			MailStore os = p.otherStore(owner);
 			if (os == null || os == p.getStore() || !os.getInboxDirectory().isDirectory()) {
 				continue;
