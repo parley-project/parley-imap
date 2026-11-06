@@ -8,8 +8,7 @@ import us.bringardner.parley.imap.server.ImapRequestProcessor;
 import us.bringardner.parley.imap.server.ImapStrings;
 import us.bringardner.parley.mail.store.MailboxAcl;
 import us.bringardner.parley.net.sasl.SaslPrep;
-import us.bringardner.parley.net.server.AccessControlUnavailableException;
-import us.bringardner.parley.net.server.IAccessControlList;
+import us.bringardner.parley.iam.ParleyPrincipal;
 
 /** What the RFC 4314 commands share. */
 final class AclSupport {
@@ -37,11 +36,13 @@ final class AclSupport {
 
 	/**
 	 * Check an identifier SETACL may give rights to: anyone, a group named with its domain
-	 * ({@code $sales@bringardner.us}) or a user the access control list knows; "-" before any
+	 * ({@code $sales@bringardner.us}) or a user the server's user registry knows; "-" before any
 	 * of them for a negative entry.
 	 *
-	 * @return the identifier to store (a user as the access control list names it, so a
-	 * grant made with another spelling still matches the login), or null if it may not be given rights
+	 * @return the identifier to store (a user as the user registry names it, so a grant made
+	 * with another spelling still matches the login), or null if it may not be given rights
+	 * @throws us.bringardner.parley.iam.UserRegistryUnavailableException when the user registry
+	 * can't answer now (NO [UNAVAILABLE])
 	 */
 	static String grantee(ImapRequestProcessor p, String id) throws IOException {
 		boolean negative = id.charAt(0) == MailboxAcl.NEGATIVE;
@@ -54,13 +55,9 @@ final class AclSupport {
 			int at = g.indexOf('@');
 			return at > 0 && at < g.length() - 1 ? id : null;
 		}
-		IAccessControlList acl = p.getServer().getAccessControl();
-		try {
-			us.bringardner.parley.net.server.IPrincipal u = acl == null ? null : acl.findPrincipal(who);
-			return u == null ? null : (negative ? "-" : "") + u.getName();
-		} catch (AccessControlUnavailableException e) {
-			throw new IOException("The users can't be read now: " + e.getMessage(), e);
-		}
+		ParleyPrincipal u = p.getServer().requireUserRegistry().findPrincipal(who);
+		// a group is named with $; a bare name is a user's
+		return u == null || u.isGroup() ? null : (negative ? "-" : "") + u.getName();
 	}
 
 	/** Check the a right; replies NO and returns null without it. */

@@ -42,7 +42,7 @@ public class TestImapAcl {
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
 		server.getLogger().setLevel(Level.ERROR);
-		server.setAccessControl(ServerTestSupport.acl(
+		server.setUserRegistry(ServerTestSupport.registry(
 				"alice@x.us, pw, READ|WRITE",
 				"s1@x.us, pw, READ|WRITE, maildrop=shared/box",
 				"olga@x.us, pw, READ|WRITE",

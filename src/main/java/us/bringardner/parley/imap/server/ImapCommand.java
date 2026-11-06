@@ -2,19 +2,22 @@ package us.bringardner.parley.imap.server;
 
 import java.io.IOException;
 
+import us.bringardner.parley.iam.BasicParleyPermission;
+import us.bringardner.parley.iam.ParleyPermission;
+import us.bringardner.parley.iam.StandardPermissions;
 import us.bringardner.parley.net.server.IStatefulCommand;
-import us.bringardner.parley.net.server.IPermission;
-import us.bringardner.parley.net.server.Permission;
 
 /**
- * An IMAP command. As in FtpCommand and Pop3Command, permissions come from the
- * access control list: READ is needed to log in and read mail, WRITE to change
- * anything (flags, mailboxes, messages).
+ * An IMAP command. As in FtpCommand and Pop3Command, permissions are checked by the
+ * server's user registry (parley-iam): read is needed to log in and read mail, write
+ * to change anything (flags, mailboxes, messages).
  */
 public interface ImapCommand extends IStatefulCommand<ImapCommand.State> {
 
-	IPermission READ_PERMISSION = new Permission("READ");
-	IPermission WRITE_PERMISSION = new Permission("WRITE");
+	/** read on the server as a whole: logging in and reading mail */
+	ParleyPermission READ_PERMISSION = new BasicParleyPermission(StandardPermissions.READ, null);
+	/** write on the server as a whole: changing flags, mailboxes and messages */
+	ParleyPermission WRITE_PERMISSION = new BasicParleyPermission(StandardPermissions.WRITE, null);
 
 	/** Session states, RFC 9051 section 3. */
 	enum State {

@@ -18,7 +18,7 @@ public class Logout extends NoAuthReqBaseCommand {
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		r.end();
 		p.untagged(BYE + " Logging out");
-		p.logout();
+		p.endSession();
 		p.tagged(r.getTag(), OK, "LOGOUT completed");
 		p.flush();
 	}
