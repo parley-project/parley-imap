@@ -16,13 +16,16 @@ import java.util.Map;
 
 import us.bringardner.parley.core.ILogger;
 import us.bringardner.parley.files.FileSource;
+import us.bringardner.parley.iam.AuthenticationResult;
+import us.bringardner.parley.iam.AuthorizationResult;
+import us.bringardner.parley.iam.ParleyPermission;
+import us.bringardner.parley.iam.ParleyPrincipal;
+import us.bringardner.parley.iam.UserRegistryUnavailableException;
 import us.bringardner.parley.net.IConnection;
 import us.bringardner.parley.mail.server.AbstractMailProcessor;
 import us.bringardner.parley.net.capability.CapabilityRegistry;
 import us.bringardner.parley.net.server.ICommand;
 import us.bringardner.parley.net.server.StateMachine;
-import us.bringardner.parley.net.server.AccessControlUnavailableException;
-import us.bringardner.parley.net.server.IPrincipal;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand.State;
 import us.bringardner.parley.mail.store.MailStore;
@@ -47,12 +50,12 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	private static final long serialVersionUID = 1L;
 
-	/** Principal parameter: the user's maildrop (INBOX) directory, as for POP3. */
+	/** Principal attribute: the user's maildrop (INBOX) directory, as for POP3. */
 	public static final String PARAMETER_MAILDROP = "maildrop";
 
 	public enum LoginResult {
 		OK, FAILED, NOT_AUTHORIZED, TLS_REQUIRED, ERROR,
-		/** The access control list can't answer now (its database is down, say): try again later. @since 1.1.0 */
+		/** The user registry can't answer now (its database is down, say): try again later. @since 1.1.0 */
 		UNAVAILABLE
 	}
 
@@ -87,6 +90,8 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	private String selectedName;
 	private List<Long> savedSearch;
 	private volatile boolean idling;
+	/** The logged-in user's group names (for $group ACL entries), read once a session; null until read. */
+	private java.util.Set<String> groupNames;
 
 	public ImapRequestProcessor() {
 		super();
@@ -178,7 +183,21 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 				}
 			}
 			flush();
+			if (isTooManyLoginFailures()) {
+				// the last failed login has been answered (and counted by parley-net): say goodbye and close
+				logInfo("Too many failed logins, closing " + getConnection().getSocket());
+				replyTooManyLoginFailures();
+				flush();
+				endSession();
+				return;
+			}
 		}
+	}
+
+	/** {@code * BYE}, before the connection is closed after too many failed logins. */
+	@Override
+	protected void replyTooManyLoginFailures() throws IOException {
+		untagged(BYE + " Too many failed logins");
 	}
 
 	private void openStreams() throws IOException {
@@ -259,6 +278,10 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			tagged(req.getTag(), BAD, e.getMessage());
 		} catch (MailStore.StoreException e) {
 			no(req, e.getCode(), e.getMessage());
+		} catch (UserRegistryUnavailableException e) {
+			// a user, group or permission couldn't be read: try again later, never "denied" (RFC 5530)
+			logError(cmd.getName() + ": the user registry can't answer: " + e.getMessage());
+			no(req, CODE_UNAVAILABLE, "The user registry can't answer now, try again later");
 		} catch (IOException e) {
 			if (isTlsHandshakeFailure(e)) {
 				// STARTTLS: the client's handshake failed, and there's no connection left to answer on
@@ -498,42 +521,94 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	// ------------------------------------------------------------------ login
 
-	/** Log in (LOGIN, AUTHENTICATE PLAIN); user name and password are prepared with SASLprep. */
+	/**
+	 * Log in with a user name and password (LOGIN). Both are prepared with SASLprep and checked by
+	 * the server's user registry through the session's {@code authenticate}; a refused login is
+	 * counted, and answered late, by parley-net.
+	 *
+	 * @throws IllegalStateException when the server has no user registry
+	 */
 	public LoginResult login(String user, String password) {
 		if (isLoginBlockedUntilTls()) {
 			return LoginResult.TLS_REQUIRED;
 		}
-		try {
-			return completeLogin(checkLogin(user, password));
-		} catch (AccessControlUnavailableException e) {
-			logError("Can't check the login of " + user + ": " + e.getMessage());
+		return afterAuthentication(authenticate(user, password), user);
+	}
+
+	/**
+	 * Log in a user a SASL mechanism has already proven (AUTHENTICATE SCRAM-*), with the
+	 * authenticator that ran the exchange: the same checks as {@link #login(String, String)} after
+	 * the password.
+	 *
+	 * @param authenticator the authenticator of the successful exchange
+	 * @param user the user from the exchange's outcome
+	 * @since 2.0.0 (was loginVerified(String) since 1.1.0)
+	 */
+	public LoginResult loginVerified(ImapSaslAuthenticator authenticator, String user) {
+		if (isLoginBlockedUntilTls()) {
+			return LoginResult.TLS_REQUIRED;
+		}
+		return afterAuthentication(authenticator.verified(user), user);
+	}
+
+	/**
+	 * A SASL authenticator for this session's AUTHENTICATE command (PLAIN, and SCRAM when the user
+	 * registry can serve it).
+	 *
+	 * @since 2.0.0
+	 */
+	@Override
+	public ImapSaslAuthenticator newSaslAuthenticator() {
+		return new ImapSaslAuthenticator(this);
+	}
+
+	/**
+	 * After a login was checked: check read and open the mail store when it was good; a temporary
+	 * failure when the user registry couldn't answer; otherwise FAILED (already counted by the session).
+	 */
+	LoginResult afterAuthentication(AuthenticationResult result, String user) {
+		if (result == null) {
+			return LoginResult.FAILED;
+		}
+		switch (result.getStatus()) {
+		case AUTHENTICATED:
+			return openStore(result.getPrincipal());
+		case UNAVAILABLE:
+			logError("Can't check the login of " + user + ": " + result.getReason());
 			return LoginResult.UNAVAILABLE;
+		default:
+			return LoginResult.FAILED;
 		}
 	}
 
 	/**
-	 * Log in a user a SASL mechanism has already proven (AUTHENTICATE SCRAM-*): the same checks
-	 * as {@link #login(String, String)} after the password.
-	 *
-	 * @since 1.1.0
+	 * Check read and open the user's mail store, entering the AUTHENTICATED state. The session is
+	 * logged in already; it is logged out again when anything here fails.
 	 */
-	public LoginResult loginVerified(String user) {
-		if (isLoginBlockedUntilTls()) {
-			return LoginResult.TLS_REQUIRED;
-		}
+	private LoginResult openStore(ParleyPrincipal p) {
+		LoginResult ret = LoginResult.ERROR;
 		try {
-			return completeLogin(verifiedPrincipal(user));
-		} catch (AccessControlUnavailableException e) {
-			logError("Can't look up " + user + ": " + e.getMessage());
-			return LoginResult.UNAVAILABLE;
+			ret = openStoreFor(p);
+			return ret;
+		} finally {
+			if (ret != LoginResult.OK) {
+				logout();
+			}
 		}
 	}
 
-	private LoginResult completeLogin(IPrincipal p) {
+	private LoginResult openStoreFor(ParleyPrincipal p) {
 		if (p == null) {
 			return LoginResult.FAILED;
 		}
-		if (!getServer().isAuthorized(p, ImapCommand.READ_PERMISSION)) {
+		AuthorizationResult read = checkPermission(ImapCommand.READ_PERMISSION, null);
+		if (read.getStatus() == AuthorizationResult.Status.UNAVAILABLE) {
+			logError("Can't check the read permission of " + p.getName() + ": " + read.getReason());
+			return LoginResult.UNAVAILABLE;
+		}
+		if (read.getStatus() != AuthorizationResult.Status.ALLOWED) {
+			// no IMAP access: NO [AUTHORIZATIONFAILED], counted as a failed login
+			refuse(p.getName() + " doesn't hold read");
 			return LoginResult.NOT_AUTHORIZED;
 		}
 		try {
@@ -542,12 +617,16 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			logError("Can't open the mail store of " + p.getName(), e);
 			return LoginResult.ERROR;
 		}
-		setPrincipal(p);
+		groupNames = null;
+		otherStores.clear();
 		states.moveTo(State.AUTHENTICATED);
 		return LoginResult.OK;
 	}
 
-	/** Reply to a login attempt; after too many failures the connection is closed. */
+	/**
+	 * Reply to a login attempt. A refused login has been counted and delayed by the session
+	 * already; after too many, the session says {@code * BYE} and closes after this reply.
+	 */
 	public void replyLoginResult(ImapRequest req, LoginResult result) throws IOException {
 		switch (result) {
 		case OK:
@@ -557,30 +636,41 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			no(req, CODE_PRIVACYREQUIRED, "Use STARTTLS before logging in");
 			break;
 		case NOT_AUTHORIZED:
-			loginFailedDelay();
 			no(req, CODE_AUTHORIZATIONFAILED, "Not allowed to use this server");
 			break;
 		case ERROR:
 			no(req, CODE_UNAVAILABLE, "The mail store can't be opened");
 			break;
 		case UNAVAILABLE:
-			// not the client's fault: no delay, not counted as a failed login
+			// not the client's fault: no delay, not counted as a failed login (RFC 5530)
 			no(req, CODE_UNAVAILABLE, "Logins can't be checked now, try again later");
 			break;
 		default:
-			loginFailedDelay();
 			no(req, CODE_AUTHENTICATIONFAILED, "Invalid user name or password");
-			if (tooManyLoginFailures()) {
-				untagged(BYE + " Too many failed logins");
-				flush();
-				states.moveTo(State.LOGOUT);
-			}
 		}
 	}
 
-	/** True if the user may change things (WRITE permission). */
-	public boolean canWrite() {
-		return isAuthorized(ImapCommand.WRITE_PERMISSION);
+	/**
+	 * True when the user registry gives the logged-in user this permission.
+	 *
+	 * @throws UserRegistryUnavailableException when the registry can't answer now (the command
+	 * gets NO [UNAVAILABLE])
+	 */
+	private boolean holds(ParleyPermission permission) throws UserRegistryUnavailableException {
+		AuthorizationResult r = checkPermission(permission, null);
+		if (r.getStatus() == AuthorizationResult.Status.UNAVAILABLE) {
+			throw new UserRegistryUnavailableException(r.getReason());
+		}
+		return r.getStatus() == AuthorizationResult.Status.ALLOWED;
+	}
+
+	/**
+	 * True if the user may change things (the write permission).
+	 *
+	 * @throws UserRegistryUnavailableException when the user registry can't answer now
+	 */
+	public boolean canWrite() throws UserRegistryUnavailableException {
+		return holds(ImapCommand.WRITE_PERMISSION);
 	}
 
 	/** Read a line from the client (AUTHENTICATE responses, IDLE's DONE); null at end of stream. */
@@ -665,40 +755,56 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	/** Another user's store (this user's own for its own name), or null if there is no such user. */
 	public MailStore otherStore(String user) throws IOException {
-		IPrincipal me = getPrincipal();
+		ParleyPrincipal me = getPrincipal();
 		if (me != null && me.getName().equals(user)) {
 			return store;
 		}
 		if (otherStores.containsKey(user)) {
 			return otherStores.get(user);
 		}
-		IPrincipal p;
-		try {
-			us.bringardner.parley.net.server.IAccessControlList acl = getServer().getAccessControl();
-			p = acl == null ? null : acl.findPrincipal(user);
-		} catch (AccessControlUnavailableException e) {
-			throw new IOException("The users can't be read now: " + e.getMessage(), e);
-		}
-		MailStore s = p == null ? null : getImapServer().openMailStore(p);
+		// a registry that can't answer throws UserRegistryUnavailableException: NO [UNAVAILABLE]
+		ParleyPrincipal p = getServer().requireUserRegistry().findPrincipal(user);
+		MailStore s = p == null || p.isGroup() ? null : getImapServer().openMailStore(p);
 		otherStores.put(user, s);
 		return s;
 	}
 
-	/** True if the user may read mail (READ permission). */
-	public boolean canRead() {
-		return isAuthorized(ImapCommand.READ_PERMISSION);
+	/**
+	 * True if the user may read mail (the read permission).
+	 *
+	 * @throws UserRegistryUnavailableException when the user registry can't answer now
+	 */
+	public boolean canRead() throws UserRegistryUnavailableException {
+		return holds(ImapCommand.READ_PERMISSION);
+	}
+
+	/**
+	 * The names of the logged-in user's groups, for {@code $group} entries in mailbox ACLs:
+	 * parley-mail's {@code findGroupNames} (the user registry's {@code findGroups}),
+	 * read once a session.
+	 *
+	 * @throws UserRegistryUnavailableException when the user registry can't answer now
+	 * @since 2.0.0
+	 */
+	public java.util.Set<String> groupNames() throws UserRegistryUnavailableException {
+		if (groupNames == null) {
+			groupNames = java.util.Collections.unmodifiableSet(getImapServer().findGroupNames(getPrincipal()));
+		}
+		return groupNames;
 	}
 
 	/**
 	 * The user's rights on a mailbox: its ACL's, limited by the server's permissions; "" for a
 	 * mailbox that doesn't exist.
+	 *
+	 * @throws UserRegistryUnavailableException when the user registry can't answer now
 	 */
 	public String rights(MailboxRef ref) throws IOException {
 		if (!ref.isMailbox()) {
 			return "";
 		}
-		IPrincipal me = getPrincipal();
-		String r = ref.store.rightsOf(ref.local, me.getName(), me.getGroups());
+		ParleyPrincipal me = getPrincipal();
+		String r = ref.store.rightsOf(ref.local, me.getName(), groupNames());
 		return MailboxAcl.limit(r, canRead(), canWrite());
 	}
 
@@ -824,8 +930,16 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		}
 	}
 
-	public void logout() {
+	/**
+	 * End the session (LOGOUT, too many failed logins): close the selected mailbox, log the user out
+	 * and enter the LOGOUT state.
+	 *
+	 * @since 2.0.0 (was logout(); parley-net's session now has its own final logout())
+	 */
+	public void endSession() {
 		deselect();
+		logout();
+		groupNames = null;
 		states.moveTo(State.LOGOUT);
 	}
 
