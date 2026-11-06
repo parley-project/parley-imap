@@ -1,5 +1,6 @@
 package us.bringardner.parley.imap.server.commands;
 
+import us.bringardner.parley.iam.AuthenticationResult;
 import us.bringardner.parley.net.sasl.ISaslChannel;
 import us.bringardner.parley.net.sasl.ISaslMechanism;
 import us.bringardner.parley.net.sasl.SaslMechanisms;
@@ -35,7 +36,7 @@ public class Authenticate extends NoAuthReqBaseCommand {
 	 *         until TLS), so plaintext mechanisms are not filtered here.
 	 */
 	public static List<String> mechanisms(ImapRequestProcessor p) {
-		return MECHANISMS.offered(new ImapSaslAuthenticator(p), true);
+		return MECHANISMS.offered(p.newSaslAuthenticator(), true);
 	}
 
 	@Override
@@ -43,7 +44,7 @@ public class Authenticate extends NoAuthReqBaseCommand {
 		String name = r.nextAtom().toUpperCase(Locale.ROOT);
 		String initial = r.hasNext() ? r.nextAtom() : null;
 		r.end();
-		ImapSaslAuthenticator authenticator = new ImapSaslAuthenticator(p);
+		ImapSaslAuthenticator authenticator = p.newSaslAuthenticator();
 		ISaslMechanism mechanism = MECHANISMS.find(name);
 		if (mechanism == null || !MECHANISMS.offered(authenticator, true).contains(mechanism.getName())) {
 			p.no(r, CODE_CANNOT, "Unsupported authentication mechanism");
@@ -72,14 +73,19 @@ public class Authenticate extends NoAuthReqBaseCommand {
 		case SUCCESS:
 			// PLAIN logged in while checking the password; SCRAM proved the user without one
 			ImapRequestProcessor.LoginResult ok = authenticator.getLastResult();
-			p.replyLoginResult(r, ok != null ? ok : p.loginVerified(outcome.getUser()));
+			p.replyLoginResult(r, ok != null ? ok : p.loginVerified(authenticator, outcome.getUser()));
 			break;
 		case FAILED:
 			ImapRequestProcessor.LoginResult result = authenticator.getLastResult();
-			if (result == null && authenticator.isUnavailable()) {
-				result = ImapRequestProcessor.LoginResult.UNAVAILABLE;
+			if (result == null) {
+				// no password was checked (a wrong SCRAM proof, or the registry couldn't answer):
+				// counted as a refused login unless the registry was down
+				AuthenticationResult failed = authenticator.exchangeFailed("AUTHENTICATE " + mechanism.getName() + " failed");
+				result = failed.getStatus() == AuthenticationResult.Status.UNAVAILABLE
+						? ImapRequestProcessor.LoginResult.UNAVAILABLE
+						: ImapRequestProcessor.LoginResult.FAILED;
 			}
-			p.replyLoginResult(r, result != null ? result : ImapRequestProcessor.LoginResult.FAILED);
+			p.replyLoginResult(r, result);
 			break;
 		case CANCELLED:
 			p.bad(r, "Authentication cancelled");

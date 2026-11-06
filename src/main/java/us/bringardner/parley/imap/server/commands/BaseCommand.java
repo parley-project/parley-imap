@@ -6,7 +6,7 @@ import java.util.Set;
 
 import us.bringardner.parley.net.server.AbstractCommand;
 import us.bringardner.parley.net.server.ICommandProcessor;
-import us.bringardner.parley.net.server.IPermission;
+import us.bringardner.parley.iam.ParleyPermission;
 import us.bringardner.parley.net.server.IRequestContext;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand;
@@ -16,7 +16,7 @@ import us.bringardner.parley.mail.store.MailStore;
 
 /**
  * Base for IMAP commands: by default valid in the authenticated and selected
- * states, needing the READ permission.
+ * states, needing the read permission.
  */
 public abstract class BaseCommand extends AbstractCommand implements ImapCommand, IMAP {
 
@@ -44,7 +44,7 @@ public abstract class BaseCommand extends AbstractCommand implements ImapCommand
 	}
 
 	@Override
-	public IPermission getPermission() {
+	public ParleyPermission getPermission() {
 		return READ_PERMISSION;
 	}
 

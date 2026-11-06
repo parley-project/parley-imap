@@ -91,6 +91,12 @@
 			<artifactId>parley-net</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<!-- Used directly: users, logins and permissions (UserRegistry, ParleyPrincipal, ParleyPermission) -->
+		<dependency>
+			<groupId>us.bringardner.parley</groupId>
+			<artifactId>parley-iam</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 
 		<!-- Tests only: what the mail protocols' tests share (MailTestSupport, MailTestAcl.txt), in parley-mail's tests jar -->
 		<dependency>

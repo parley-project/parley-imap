@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 
 import us.bringardner.parley.files.FileSource;
-import us.bringardner.parley.net.server.IPrincipal;
+import us.bringardner.parley.iam.ParleyPrincipal;
 import us.bringardner.parley.net.IProcessor;
 import us.bringardner.parley.net.IProcessorFactory;
 import us.bringardner.parley.imap.IMAP;
@@ -22,9 +22,13 @@ import us.bringardner.parley.mail.store.ShareIndex;
  * <p>
  * Mail is shared with Pop3Server: the maildrop root is the same, a user's INBOX
  * is their POP3 maildrop, and the user's other mailboxes are kept under it (see
- * {@link MailStore}). Users come from the access control list
- * ({@code parley.mail.imap.authenticationProvider}): READ is needed to log in, WRITE
- * to change anything.
+ * {@link MailStore}). Users come from the server's parley-iam user registry: one given with
+ * {@code setUserRegistry} (parley-mail reads {@code parley.mail.users} into one), or the class
+ * {@code parley.mail.imap.authenticationProvider} names (parley-net's FileUserRegistry, say). With
+ * none, a login is a configuration error, not a refused login. The registry decides the
+ * permissions: read is needed to log in, write to change anything; when it can't answer, the
+ * client gets NO [UNAVAILABLE] (RFC 5530), never a refusal. Failed logins are counted and
+ * answered late by parley-net (loginFailureDelay, maxLoginAttempts).
  * <p>
  * Each mailbox has an access control list (RFC 4314, {@link us.bringardner.parley.mail.store.MailboxAcl}):
  * SETACL, DELETEACL, GETACL, LISTRIGHTS and MYRIGHTS manage it, and every command checks the
@@ -174,6 +178,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 		setRequireTls(getBooleanProperty(propertyName(REQUIRE_TLS), false));
 		initMaildropRoot(FILE_SOURCE_PROP, null, ROOT_PROP, null, DEFAULT_ROOT, DEFAULT_ROOT_WINDOWS);
 
+		// make the user registry now (authenticationProvider property), or warn that there is none
 		warnIfNoAccessControl();
 	}
 
@@ -190,11 +195,11 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	/**
-	 * A user's INBOX directory: the principal's {@code maildrop} parameter, or the
+	 * A user's INBOX directory: the principal's {@code maildrop} attribute, or the
 	 * user name, inside the maildrop root (the same directory Pop3Server uses).
 	 */
-	public FileSource getInboxDirectory(IPrincipal principal) throws IOException {
-		Object param = principal.getParameter(ImapRequestProcessor.PARAMETER_MAILDROP);
+	public FileSource getInboxDirectory(ParleyPrincipal principal) throws IOException {
+		Object param = principal.getAttribute(ImapRequestProcessor.PARAMETER_MAILDROP);
 		return getInboxDirectory(param != null ? param.toString() : principal.getName());
 	}
 
@@ -221,7 +226,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	/** The mail store of a user who logs in: made (with the default mailboxes) if it isn't there yet. */
-	public MailStore getMailStore(IPrincipal principal) throws IOException {
+	public MailStore getMailStore(ParleyPrincipal principal) throws IOException {
 		MailStore store = openMailStore(principal);
 		store.init(createDefaultMailboxes);
 		return store;
@@ -231,7 +236,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	 * Another user's mail store, as it is (nothing is made), for the Other Users namespace.
 	 * @since 2.0.0
 	 */
-	public MailStore openMailStore(IPrincipal principal) throws IOException {
+	public MailStore openMailStore(ParleyPrincipal principal) throws IOException {
 		MailStore store = new MailStore(getInboxDirectory(principal), registry, principal.getName());
 		store.setShareIndex(getShareIndex());
 		return store;
