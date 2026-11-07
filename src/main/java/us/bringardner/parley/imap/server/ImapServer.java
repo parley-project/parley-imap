@@ -81,6 +81,12 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 
 	private final MailboxRegistry registry = MailboxRegistry.get();
 
+	/** The session loop closes a session idle for the autologout time. */
+	@Override
+	protected void onAutologoutChanged(int autologout) {
+		setMaxIdleConnection(autologout);
+	}
+
 	public ImapServer(int port, String name, boolean secure) {
 		super(port, name, secure ? IMAPS_PREFIX : IMAP_PREFIX, secure);
 		initMe();
@@ -171,10 +177,9 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 				return ret;
 			}
 		});
-		// sessions read the socket through their own reader and do their own autologout
-		setMaxIdleConnection(Long.MAX_VALUE / 2);
-
 		initAutologout(propertyName(AUTOLOGOUT), DEFAULT_AUTOLOGOUT);
+		// the session loop closes a session idle for this long (AbstractCommandProcessor.isIdleTooLong)
+		setMaxIdleConnection(getAutologout());
 		setRequireTls(getBooleanProperty(propertyName(REQUIRE_TLS), false));
 		initMaildropRoot(FILE_SOURCE_PROP, null, ROOT_PROP, null, DEFAULT_ROOT, DEFAULT_ROOT_WINDOWS);
 

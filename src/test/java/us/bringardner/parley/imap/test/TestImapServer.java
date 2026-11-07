@@ -369,6 +369,43 @@ public class TestImapServer {
 		}
 	}
 
+	@Test
+	public void testIdleIsLoggedOutAfterAutologout() throws Exception {
+		reset("tony");
+		int old = server.getAutologout();
+		try (ImapClient c = login("tony", "secret")) {
+			c.ok("SELECT INBOX");
+			server.setAutologout(1500);
+			c.send("i1 IDLE");
+			assertEquals("+ idling", c.readLine());
+			// RFC 9051 section 6.3.13: an idling client is still logged out after autologout
+			assertEquals("* BYE Autologout; idle for too long", c.readLine());
+			assertNull(c.readLine());
+		} finally {
+			server.setAutologout(old);
+		}
+	}
+
+	@Test
+	public void testStopSaysBye() throws Exception {
+		FileSource stopRoot = FileSourceFactory.getDefaultFactory().createTempDirectory("imapstop");
+		us.bringardner.parley.mail.store.MailLocks.writeStoreSettings(stopRoot, us.bringardner.parley.net.lock.Sharing.OFF);
+		ImapServer s = new ImapServer(0, "ImapStopServer", false);
+		try {
+			s.setMaildropRoot(stopRoot);
+			s.getLogger().setLevel(Level.ERROR);
+			s.startAndWait(10000);
+			try (ImapClient c = new ImapClient(s.getLocalPort())) {
+				s.stop();
+				assertEquals("* BYE Server shutting down", c.readLine());
+				assertNull(c.readLine());
+			}
+		} finally {
+			s.stop();
+			deleteAll(stopRoot);
+		}
+	}
+
 	// ------------------------------------------------------------------ mailboxes
 
 	@Test
