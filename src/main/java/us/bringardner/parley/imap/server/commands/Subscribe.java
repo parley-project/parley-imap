@@ -21,4 +21,10 @@ public class Subscribe extends BaseCommand {
 		store(p).subscribe(name);
 		p.ok(r, "SUBSCRIBE completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

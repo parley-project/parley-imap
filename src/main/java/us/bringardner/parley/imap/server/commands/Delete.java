@@ -27,4 +27,10 @@ public class Delete extends BaseCommand {
 		ref.store.delete(ref.local);
 		p.ok(r, "DELETE completed");
 	}
+
+	/** Changes mail, so it needs the write permission. */
+	@Override
+	public us.bringardner.parley.iam.ParleyPermission getPermission() {
+		return WRITE_PERMISSION;
+	}
 }

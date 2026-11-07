@@ -4,7 +4,6 @@ import us.bringardner.parley.iam.AuthenticationResult;
 import us.bringardner.parley.net.sasl.ISaslChannel;
 import us.bringardner.parley.net.sasl.ISaslMechanism;
 import us.bringardner.parley.net.sasl.SaslMechanisms;
-import us.bringardner.parley.net.sasl.SaslOutcome;
 import us.bringardner.parley.net.sasl.SaslServerDriver;
 import java.io.IOException;
 import java.util.List;
@@ -16,7 +15,8 @@ import us.bringardner.parley.imap.server.ImapSaslAuthenticator;
 
 /**
  * AUTHENTICATE mechanism [initial-response] (RFC 9051 section 6.2.2, SASL-IR RFC 4959). The
- * exchange itself is run by {@link SaslServerDriver}; this class supplies the IMAP parts:
+ * exchange itself is run by the authenticator (parley-net's {@link SaslServerDriver} underneath);
+ * this class supplies the IMAP parts:
  * "+" continuations, "*" to cancel, and the replies. Which mechanisms are offered is decided by
  * {@link ImapSaslAuthenticator} (PLAIN, RFC 4616).
  */
@@ -58,7 +58,7 @@ public class Authenticate extends NoAuthReqBaseCommand {
 			p.bad(r, "Authentication cancelled");
 			return;
 		}
-		SaslOutcome outcome = SaslServerDriver.authenticate(mechanism, authenticator, initial, new ISaslChannel() {
+		AuthenticationResult result = authenticator.authenticate(mechanism, initial, new ISaslChannel() {
 			@Override
 			public void sendChallenge(String base64) throws IOException {
 				p.continuation(base64);
@@ -69,24 +69,12 @@ public class Authenticate extends NoAuthReqBaseCommand {
 				return p.readLine();
 			}
 		});
-		switch (outcome.getStatus()) {
-		case SUCCESS:
-			// PLAIN logged in while checking the password; SCRAM proved the user without one
-			ImapRequestProcessor.LoginResult ok = authenticator.getLastResult();
-			p.replyLoginResult(r, ok != null ? ok : p.loginVerified(authenticator, outcome.getUser()));
-			break;
-		case FAILED:
-			ImapRequestProcessor.LoginResult result = authenticator.getLastResult();
-			if (result == null) {
-				// no password was checked (a wrong SCRAM proof, or the registry couldn't answer):
-				// counted as a refused login unless the registry was down
-				AuthenticationResult failed = authenticator.exchangeFailed("AUTHENTICATE " + mechanism.getName() + " failed");
-				result = failed.getStatus() == AuthenticationResult.Status.UNAVAILABLE
-						? ImapRequestProcessor.LoginResult.UNAVAILABLE
-						: ImapRequestProcessor.LoginResult.FAILED;
-			}
-			p.replyLoginResult(r, result);
-			break;
+		if (result != null) {
+			// a login was checked (and a refusal already counted): open the mail store when it was good
+			p.replyLoginResult(r, p.afterAuthentication(result, "AUTHENTICATE " + mechanism.getName()));
+			return;
+		}
+		switch (authenticator.getOutcome().getStatus()) {
 		case CANCELLED:
 			p.bad(r, "Authentication cancelled");
 			break;
