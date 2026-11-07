@@ -54,7 +54,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	public static final String PARAMETER_MAILDROP = "maildrop";
 
 	public enum LoginResult {
-		OK, FAILED, NOT_AUTHORIZED, TLS_REQUIRED, ERROR,
+		OK, FAILED, TLS_REQUIRED, ERROR,
 		/** The user registry can't answer now (its database is down, say): try again later. @since 1.1.0 */
 		UNAVAILABLE
 	}
@@ -85,6 +85,8 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	private transient MailboxView view;
 	/** The rights on the selected mailbox, as they were when it was selected (RFC 4314 section 5.2 lets them be kept). */
 	private String selectedRights = "";
+	/** Why the logged-in user can't read mail (the read permission is missing), or null. */
+	private String readMissing;
 	/** Other users' stores this session has opened, by user name (null: no such user). */
 	private transient Map<String, MailStore> otherStores = new java.util.HashMap<>();
 	private String selectedName;
@@ -271,6 +273,9 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			return;
 		}
 		try {
+			if (states.get() != State.NOT_AUTHENTICATED && cmd.requiresAuthorization() && !mayRun(cmd, req)) {
+				return;
+			}
 			cmd.execute(this, req);
 		} catch (ConnectionLostException e) {
 			throw e;
@@ -294,6 +299,22 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			logError("Error in " + cmd.getName(), e);
 			no(req, CODE_SERVERBUG, "Internal error");
 		}
+	}
+
+	/**
+	 * A logged-in command needs its permission (read, for every command that uses mailboxes). Without
+	 * it the command gets NO [NOPERM] saying which permission is missing, and the administrators are
+	 * told (parley-mail's permissionMissing).
+	 *
+	 * @return true when the command may run
+	 * @throws UserRegistryUnavailableException when the registry can't answer now (NO [UNAVAILABLE])
+	 */
+	private boolean mayRun(ImapCommand cmd, ImapRequest req) throws IOException {
+		if (holds(cmd.getPermission())) {
+			return true;
+		}
+		no(req, CODE_NOPERM, cmd.getName() + " refused: " + permissionMissing(cmd.getName(), cmd.getPermission(), null));
+		return false;
 	}
 
 	private String stateName() {
@@ -536,22 +557,6 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	}
 
 	/**
-	 * Log in a user a SASL mechanism has already proven (AUTHENTICATE SCRAM-*), with the
-	 * authenticator that ran the exchange: the same checks as {@link #login(String, String)} after
-	 * the password.
-	 *
-	 * @param authenticator the authenticator of the successful exchange
-	 * @param user the user from the exchange's outcome
-	 * @since 2.0.0 (was loginVerified(String) since 1.1.0)
-	 */
-	public LoginResult loginVerified(ImapSaslAuthenticator authenticator, String user) {
-		if (isLoginBlockedUntilTls()) {
-			return LoginResult.TLS_REQUIRED;
-		}
-		return afterAuthentication(authenticator.verified(user), user);
-	}
-
-	/**
 	 * A SASL authenticator for this session's AUTHENTICATE command (PLAIN, and SCRAM when the user
 	 * registry can serve it).
 	 *
@@ -563,10 +568,15 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	}
 
 	/**
-	 * After a login was checked: check read and open the mail store when it was good; a temporary
-	 * failure when the user registry couldn't answer; otherwise FAILED (already counted by the session).
+	 * After a login was checked (LOGIN, or a whole AUTHENTICATE exchange): open the mail store when
+	 * it was good; a temporary failure when the user registry couldn't answer; otherwise FAILED
+	 * (already counted by the session).
+	 *
+	 * @param result how the login ended
+	 * @param user who, or which command, for the log
+	 * @since 2.0.0
 	 */
-	LoginResult afterAuthentication(AuthenticationResult result, String user) {
+	public LoginResult afterAuthentication(AuthenticationResult result, String user) {
 		if (result == null) {
 			return LoginResult.FAILED;
 		}
@@ -606,11 +616,10 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			logError("Can't check the read permission of " + p.getName() + ": " + read.getReason());
 			return LoginResult.UNAVAILABLE;
 		}
-		if (read.getStatus() != AuthorizationResult.Status.ALLOWED) {
-			// no IMAP access: NO [AUTHORIZATIONFAILED], counted as a failed login
-			refuse(p.getName() + " doesn't hold read");
-			return LoginResult.NOT_AUTHORIZED;
-		}
+		// without read the login still stands (the password was right): the user is told, the
+		// administrators are told, and every command that needs read is refused
+		readMissing = read.getStatus() == AuthorizationResult.Status.ALLOWED ? null
+				: permissionMissing("login", ImapCommand.READ_PERMISSION, "reading mail");
 		try {
 			store = getImapServer().getMailStore(p);
 		} catch (IOException | RuntimeException e) {
@@ -630,13 +639,10 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	public void replyLoginResult(ImapRequest req, LoginResult result) throws IOException {
 		switch (result) {
 		case OK:
-			ok(req, "CAPABILITY " + capabilities(), "Logged in");
+			ok(req, "CAPABILITY " + capabilities(), readMissing == null ? "Logged in" : "Logged in, but " + readMissing);
 			break;
 		case TLS_REQUIRED:
 			no(req, CODE_PRIVACYREQUIRED, "Use STARTTLS before logging in");
-			break;
-		case NOT_AUTHORIZED:
-			no(req, CODE_AUTHORIZATIONFAILED, "Not allowed to use this server");
 			break;
 		case ERROR:
 			no(req, CODE_UNAVAILABLE, "The mail store can't be opened");
