@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -21,10 +20,11 @@ import us.bringardner.parley.iam.AuthorizationResult;
 import us.bringardner.parley.iam.ParleyPermission;
 import us.bringardner.parley.iam.ParleyPrincipal;
 import us.bringardner.parley.iam.UserRegistryUnavailableException;
-import us.bringardner.parley.net.IConnection;
 import us.bringardner.parley.mail.server.AbstractMailProcessor;
 import us.bringardner.parley.net.capability.CapabilityRegistry;
+import us.bringardner.parley.net.server.ConnectionLostException;
 import us.bringardner.parley.net.server.ICommand;
+import us.bringardner.parley.net.server.IRequestContext;
 import us.bringardner.parley.net.server.StateMachine;
 import us.bringardner.parley.imap.IMAP;
 import us.bringardner.parley.imap.server.ImapCommand.State;
@@ -32,7 +32,6 @@ import us.bringardner.parley.mail.store.MailStore;
 import us.bringardner.parley.mail.store.Mailbox;
 import us.bringardner.parley.mail.store.MailboxAcl;
 import us.bringardner.parley.mail.store.MailboxView;
-import us.bringardner.parley.io.IoUtils;
 
 /**
  * One IMAP session (RFC 9051). Like FtpRequestProcessor and
@@ -61,15 +60,6 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	/** Socket timeout: how often a waiting session checks for autologout and stop. */
 	private static final int POLL_INTERVAL = 1000;
-
-	/** The connection is gone (as opposed to a failure in the mail store). */
-	static final class ConnectionLostException extends IOException {
-		private static final long serialVersionUID = 1L;
-
-		ConnectionLostException(IOException cause) {
-			super(cause.getMessage(), cause);
-		}
-	}
 
 	/** NOT_AUTHENTICATED, then AUTHENTICATED, then SELECTED while a mailbox is open; LOGOUT ends it (RFC 9051 section 3). */
 	private final StateMachine<State> states = new StateMachine<>(State.NOT_AUTHENTICATED)
@@ -108,50 +98,34 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 
 	// ------------------------------------------------------------------ session loop
 
+	/** The untagged OK greeting with the capabilities. */
 	@Override
-	public void run() {
-		running = true;
-		IConnection con = getConnection();
-		try {
-			openStreams();
-			untagged(OK + " [CAPABILITY " + capabilities() + "] " + getServer().getName() + " IMAP4rev2 server ready");
-			flush();
-			loop();
-		} catch (ConnectionLostException | SocketException e) {
-			// the client went away
-		} catch (Throwable e) {
-			if (isTlsHandshakeFailure(e)) {
-				logTlsHandshakeFailure(e);
-			} else {
-				logError("An error occurred in the IMAP session; closing the connection.", e);
-			}
-		} finally {
-			deselect();
-			running = false;
-			try {
-				getServer().removeClient(this);
-			} catch (RuntimeException e) {
-				// ignore
-			}
-			IoUtils.closeQuietly(con);
-		}
+	protected void sendGreeting() throws IOException {
+		openStreams();
+		untagged(OK + " [CAPABILITY " + capabilities() + "] " + getServer().getName() + " IMAP4rev2 server ready");
+		flush();
 	}
 
-	private void loop() throws IOException {
-		while (running && !stopping && !states.is(State.LOGOUT)) {
-			ImapRequest req;
+	/**
+	 * One request, with its literals ({@link ImapCommandReader}). A line or literal that is too
+	 * long, or a request that can't be parsed, is answered (BAD, or NO [TOOBIG]) and the next one
+	 * read. When the client has been idle longer than the autologout the session ends with
+	 * {@code * BYE Autologout}.
+	 */
+	@Override
+	protected IRequestContext readRequest() throws IOException {
+		while (true) {
 			try {
-				req = reader.read();
+				return reader.read();
 			} catch (SocketTimeoutException e) {
 				if (!stopping) {
 					untagged(BYE + " Autologout; idle for too long");
 					flush();
 				}
-				return;
+				return null;
 			} catch (LineTooLongException e) {
 				untagged(BAD + " Command line too long");
 				flush();
-				continue;
 			} catch (ImapCommandReader.LiteralTooLargeException e) {
 				String msg = e.getMessage();
 				if (msg.startsWith("[TOOBIG]")) {
@@ -160,7 +134,6 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 					tagged(e.getTag(), BAD, msg);
 				}
 				flush();
-				continue;
 			} catch (ImapParseException e) {
 				if (e.getTag() != null) {
 					tagged(e.getTag(), BAD, e.getMessage());
@@ -168,32 +141,49 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 					untagged(BAD + " " + e.getMessage());
 				}
 				flush();
-				continue;
-			}
-			if (req == null) {
-				return;
-			}
-			try {
-				dispatch(req);
-			} finally {
-				for (FileSource f : req.getTempFiles()) {
-					try {
-						f.delete();
-					} catch (IOException ignore) {
-						// best effort
-					}
-				}
-			}
-			flush();
-			if (isTooManyLoginFailures()) {
-				// the last failed login has been answered (and counted by parley-net): say goodbye and close
-				logInfo("Too many failed logins, closing " + getConnection().getSocket());
-				replyTooManyLoginFailures();
-				flush();
-				endSession();
-				return;
 			}
 		}
+	}
+
+	/** Run the request, then delete the temporary files its literals were kept in. */
+	@Override
+	protected void runRequest(IRequestContext request) throws IOException {
+		ImapRequest req = (ImapRequest) request;
+		try {
+			dispatch(req);
+		} finally {
+			for (FileSource f : req.getTempFiles()) {
+				try {
+					f.delete();
+				} catch (IOException ignore) {
+					// best effort
+				}
+			}
+		}
+	}
+
+	/** Every request's replies are sent when it is done. */
+	@Override
+	protected void afterRequest() throws IOException {
+		flush();
+	}
+
+	/** LOGOUT (or too many failed logins) ends the session. */
+	@Override
+	protected boolean isSessionEnding() {
+		return states.is(State.LOGOUT);
+	}
+
+	/** Close the selected mailbox. */
+	@Override
+	protected void sessionEnded() {
+		deselect();
+	}
+
+	/** A command failed with an unexpected error (already logged): NO [SERVERBUG] with the request's tag; the session goes on. */
+	@Override
+	protected void replyCommandFailed(IRequestContext request) throws IOException {
+		no((ImapRequest) request, CODE_SERVERBUG, "Internal error");
 	}
 
 	/** {@code * BYE}, before the connection is closed after too many failed logins. */
@@ -263,6 +253,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			tagged(req.getTag(), BAD, "Unknown command " + sanitize(req.getName()));
 			return;
 		}
+		recordCommandUsed(command.getName());
 		run((ImapCommand) command, req);
 	}
 
@@ -289,16 +280,14 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			no(req, CODE_UNAVAILABLE, "The user registry can't answer now, try again later");
 		} catch (IOException e) {
 			if (isTlsHandshakeFailure(e)) {
-				// STARTTLS: the client's handshake failed, and there's no connection left to answer on
-				logTlsHandshakeFailure(e);
+				// STARTTLS: the client's handshake failed, and there's no connection left to answer on;
+				// the session loop ends the session and logs the failed handshake (one INFO line)
 				throw new ConnectionLostException(e);
 			}
 			logError("Error in " + cmd.getName(), e);
 			no(req, CODE_UNAVAILABLE, "The mail store can't do that now: " + e.getMessage());
-		} catch (RuntimeException e) {
-			logError("Error in " + cmd.getName(), e);
-			no(req, CODE_SERVERBUG, "Internal error");
 		}
+		// any other RuntimeException: the session loop logs it and answers replyCommandFailed (NO [SERVERBUG])
 	}
 
 	/**
@@ -1050,11 +1039,6 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	@Override
 	public String translateResponseCode(int code) {
 		return code == REPLY_500_GENERIC_ERROR ? BAD : OK;
-	}
-
-	@Override
-	protected void processLine(String line, Map<String, String> cmdUsed) throws IOException {
-		throw new UnsupportedOperationException("IMAP sessions read commands themselves");
 	}
 
 	@Override
