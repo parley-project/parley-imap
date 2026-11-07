@@ -30,4 +30,10 @@ public class MyRights extends BaseCommand {
 		p.untagged("MYRIGHTS " + p.mailboxName(name) + " " + AclSupport.astring(p, MailboxAcl.withObsolete(rights)));
 		p.ok(r, "MYRIGHTS completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

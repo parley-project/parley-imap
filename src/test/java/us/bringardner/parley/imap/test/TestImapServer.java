@@ -200,7 +200,20 @@ public class TestImapServer {
 			assertNull(c.readLine(), "closed after 3 failures");
 		}
 		try (ImapClient c = connect()) {
-			assertTrue(tagged(c.cmd("LOGIN nopop secret")).contains("NO [AUTHORIZATIONFAILED]"), "needs READ");
+			// the password is right, so the login stands; the reply says what's missing, and every
+			// command that uses mailboxes is refused saying why (not "no such mailbox")
+			String in = tagged(c.cmd("LOGIN nopop secret"));
+			assertTrue(in.contains(" OK ") && in.endsWith("Logged in, but nopop doesn't have the read permission"), in);
+			String select = tagged(c.cmd("SELECT INBOX"));
+			assertTrue(select.contains("NO [NOPERM] SELECT refused: nopop doesn't have the read permission"), select);
+			assertTrue(tagged(c.cmd("LIST \"\" *")).contains("NO [NOPERM]"));
+			assertTrue(tagged(c.cmd("NOOP")).contains("OK"), "still logged in");
+			// only commands that read need read
+			assertTrue(tagged(c.cmd("NAMESPACE")).contains("OK"));
+			assertTrue(tagged(c.cmd("SUBSCRIBE INBOX")).contains("OK"));
+			assertTrue(tagged(c.cmd("STATUS INBOX (MESSAGES)")).contains("NO [NOPERM] STATUS refused: nopop doesn't have the read permission"));
+		}
+		try (ImapClient c = connect()) {
 			List<String> r = c.ok("LOGIN hashed hashedpw");
 			assertTrue(tagged(r).contains("[CAPABILITY IMAP4rev1"), "capabilities after login");
 			assertFalse(tagged(r).contains("STARTTLS"));
@@ -284,10 +297,13 @@ public class TestImapServer {
 				assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
 				reply = scram(c, ScramMechanism.SHA_256, "nobody", "carolpw");
 				assertTrue(reply.startsWith("s1 NO [AUTHENTICATIONFAILED]"), reply);
-				reply = scram(c, ScramMechanism.SHA_256, "noread", "pw");
-				assertTrue(reply.startsWith("s1 NO [AUTHORIZATIONFAILED]"), "needs READ: " + reply);
 				// the password still works with PLAIN
 				c.ok("AUTHENTICATE PLAIN " + Base64.getEncoder().encodeToString(bytes("\0carol\0carolpw")));
+			}
+			try (ImapClient c = connect()) {
+				String reply = scram(c, ScramMechanism.SHA_256, "noread", "pw");
+				assertTrue(reply.startsWith("s1 OK") && reply.contains("Logged in, but noread doesn't have the read permission"), reply);
+				assertTrue(tagged(c.cmd("SELECT INBOX")).contains("NO [NOPERM]"));
 			}
 		} finally {
 			// back to the registry made from the test settings
@@ -869,6 +885,10 @@ public class TestImapServer {
 			assertTrue(tagged(c.append("INBOX", null, bytes(SIMPLE))).contains("NO [NOPERM]"));
 			assertTrue(tagged(c.cmd("CREATE X")).contains("NO [NOPERM]"));
 			assertTrue(tagged(c.cmd("DELETE Sent")).contains("NO [NOPERM]"));
+			// the refusal names the permission the command needs
+			String store = tagged(c.cmd("STORE 1 +FLAGS (\\Flagged)"));
+			assertTrue(store.contains("NO [NOPERM] STORE refused: reader doesn't have the write permission"), store);
+			assertTrue(tagged(c.cmd("EXPUNGE")).contains("NO [NOPERM] EXPUNGE refused: reader doesn't have the write permission"));
 		}
 	}
 

@@ -43,4 +43,10 @@ public class Enable extends BaseCommand {
 		p.untagged("ENABLED" + (enabled.isEmpty() ? "" : " " + String.join(" ", enabled)));
 		p.ok(r, "ENABLE completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

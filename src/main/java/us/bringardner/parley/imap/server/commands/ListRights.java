@@ -41,4 +41,10 @@ public class ListRights extends BaseCommand {
 		p.untagged(sb.toString());
 		p.ok(r, "LISTRIGHTS completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

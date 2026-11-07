@@ -31,4 +31,10 @@ public class Uid extends BaseCommand {
 		}
 		p.run((ImapCommand) cmd, sub);
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

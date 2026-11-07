@@ -22,4 +22,10 @@ public class Namespace extends BaseCommand {
 				+ " \"" + DELIMITER + "\")) NIL");
 		p.ok(r, "NAMESPACE completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

@@ -36,4 +36,10 @@ public class GetAcl extends BaseCommand {
 		p.untagged(sb.toString());
 		p.ok(r, "GETACL completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }
