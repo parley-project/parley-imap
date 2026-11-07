@@ -810,8 +810,9 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			return otherStores.get(user);
 		}
 		// a registry that can't answer throws UserRegistryUnavailableException: NO [UNAVAILABLE]
-		ParleyPrincipal p = getServer().requireUserRegistry().findPrincipal(user);
-		MailStore s = p == null || p.isGroup() ? null : getImapServer().openMailStore(p);
+		// a group has no store: findUser leaves groups out
+		ParleyPrincipal p = getServer().requireUserRegistry().findUser(user);
+		MailStore s = p == null ? null : getImapServer().openMailStore(p);
 		otherStores.put(user, s);
 		return s;
 	}
