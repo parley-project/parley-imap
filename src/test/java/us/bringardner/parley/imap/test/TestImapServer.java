@@ -208,6 +208,10 @@ public class TestImapServer {
 			assertTrue(select.contains("NO [NOPERM] SELECT refused: nopop doesn't have the read permission"), select);
 			assertTrue(tagged(c.cmd("LIST \"\" *")).contains("NO [NOPERM]"));
 			assertTrue(tagged(c.cmd("NOOP")).contains("OK"), "still logged in");
+			// only commands that read need read
+			assertTrue(tagged(c.cmd("NAMESPACE")).contains("OK"));
+			assertTrue(tagged(c.cmd("SUBSCRIBE INBOX")).contains("OK"));
+			assertTrue(tagged(c.cmd("STATUS INBOX (MESSAGES)")).contains("NO [NOPERM] STATUS refused: nopop doesn't have the read permission"));
 		}
 		try (ImapClient c = connect()) {
 			List<String> r = c.ok("LOGIN hashed hashedpw");
@@ -881,6 +885,10 @@ public class TestImapServer {
 			assertTrue(tagged(c.append("INBOX", null, bytes(SIMPLE))).contains("NO [NOPERM]"));
 			assertTrue(tagged(c.cmd("CREATE X")).contains("NO [NOPERM]"));
 			assertTrue(tagged(c.cmd("DELETE Sent")).contains("NO [NOPERM]"));
+			// the refusal names the permission the command needs
+			String store = tagged(c.cmd("STORE 1 +FLAGS (\\Flagged)"));
+			assertTrue(store.contains("NO [NOPERM] STORE refused: reader doesn't have the write permission"), store);
+			assertTrue(tagged(c.cmd("EXPUNGE")).contains("NO [NOPERM] EXPUNGE refused: reader doesn't have the write permission"));
 		}
 	}
 

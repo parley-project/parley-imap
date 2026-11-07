@@ -37,4 +37,10 @@ public class Rename extends BaseCommand {
 		src.store.rename(src.local, dst.local);
 		p.ok(r, "RENAME completed");
 	}
+
+	/** Changes mail, so it needs the write permission. */
+	@Override
+	public us.bringardner.parley.iam.ParleyPermission getPermission() {
+		return WRITE_PERMISSION;
+	}
 }

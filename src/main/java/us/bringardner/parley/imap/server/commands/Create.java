@@ -69,4 +69,10 @@ public class Create extends BaseCommand {
 		}
 		return null;
 	}
+
+	/** Changes mail, so it needs the write permission. */
+	@Override
+	public us.bringardner.parley.iam.ParleyPermission getPermission() {
+		return WRITE_PERMISSION;
+	}
 }

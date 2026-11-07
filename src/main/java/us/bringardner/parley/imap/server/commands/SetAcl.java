@@ -43,4 +43,10 @@ public class SetAcl extends BaseCommand {
 		ref.store.setRights(ref.local, grantee, change);
 		p.ok(r, "SETACL completed");
 	}
+
+	/** Changes mail, so it needs the write permission. */
+	@Override
+	public us.bringardner.parley.iam.ParleyPermission getPermission() {
+		return WRITE_PERMISSION;
+	}
 }

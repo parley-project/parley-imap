@@ -31,4 +31,10 @@ public class DeleteAcl extends BaseCommand {
 		ref.store.deleteRights(ref.local, stored != null ? stored : id);
 		p.ok(r, "DELETEACL completed");
 	}
+
+	/** Changes mail, so it needs the write permission. */
+	@Override
+	public us.bringardner.parley.iam.ParleyPermission getPermission() {
+		return WRITE_PERMISSION;
+	}
 }
