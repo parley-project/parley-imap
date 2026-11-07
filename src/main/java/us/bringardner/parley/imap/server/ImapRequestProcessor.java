@@ -304,7 +304,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	/**
 	 * A logged-in command needs its permission (read, for every command that uses mailboxes). Without
 	 * it the command gets NO [NOPERM] saying which permission is missing, and the administrators are
-	 * told (parley-mail's permissionMissing).
+	 * told (parley-net's reportMissingPermission).
 	 *
 	 * @return true when the command may run
 	 * @throws UserRegistryUnavailableException when the registry can't answer now (NO [UNAVAILABLE])
@@ -313,7 +313,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		if (holds(cmd.getPermission())) {
 			return true;
 		}
-		no(req, CODE_NOPERM, cmd.getName() + " refused: " + permissionMissing(cmd.getName(), cmd.getPermission(), null));
+		no(req, CODE_NOPERM, cmd.getName() + " refused: " + reportMissingPermission(cmd.getName(), cmd.getPermission()));
 		return false;
 	}
 
@@ -619,7 +619,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		// without read the login still stands (the password was right): the user is told, the
 		// administrators are told, and every command that needs read is refused
 		readMissing = read.getStatus() == AuthorizationResult.Status.ALLOWED ? null
-				: permissionMissing("login", ImapCommand.READ_PERMISSION, "reading mail");
+				: reportMissingPermission("login", ImapCommand.READ_PERMISSION);
 		try {
 			store = getImapServer().getMailStore(p);
 		} catch (IOException | RuntimeException e) {

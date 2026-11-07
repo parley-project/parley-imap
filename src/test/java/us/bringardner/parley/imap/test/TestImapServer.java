@@ -203,7 +203,7 @@ public class TestImapServer {
 			// the password is right, so the login stands; the reply says what's missing, and every
 			// command that uses mailboxes is refused saying why (not "no such mailbox")
 			String in = tagged(c.cmd("LOGIN nopop secret"));
-			assertTrue(in.contains(" OK ") && in.endsWith("Logged in, but nopop doesn't have the read permission (needed for reading mail)"), in);
+			assertTrue(in.contains(" OK ") && in.endsWith("Logged in, but nopop doesn't have the read permission"), in);
 			String select = tagged(c.cmd("SELECT INBOX"));
 			assertTrue(select.contains("NO [NOPERM] SELECT refused: nopop doesn't have the read permission"), select);
 			assertTrue(tagged(c.cmd("LIST \"\" *")).contains("NO [NOPERM]"));
