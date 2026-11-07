@@ -109,8 +109,8 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	/**
 	 * One request, with its literals ({@link ImapCommandReader}). A line or literal that is too
 	 * long, or a request that can't be parsed, is answered (BAD, or NO [TOOBIG]) and the next one
-	 * read. When the client has been idle longer than the autologout the session ends with
-	 * {@code * BYE Autologout}.
+	 * read. When the client has been idle longer than the autologout ({@link #isIdleTooLong()}) the
+	 * session ends with replyClosing(IDLE), {@code * BYE Autologout}.
 	 */
 	@Override
 	protected IRequestContext readRequest() throws IOException {
@@ -118,10 +118,8 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 			try {
 				return reader.read();
 			} catch (SocketTimeoutException e) {
-				if (!stopping) {
-					untagged(BYE + " Autologout; idle for too long");
-					flush();
-				}
+				replyClosing(stopping ? us.bringardner.parley.net.server.CloseReason.SERVER_STOPPING
+						: us.bringardner.parley.net.server.CloseReason.IDLE);
 				return null;
 			} catch (LineTooLongException e) {
 				untagged(BAD + " Command line too long");
@@ -189,7 +187,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	/** {@code * BYE}, before the connection is closed after too many failed logins. */
 	@Override
 	protected void replyTooManyLoginFailures() throws IOException {
-		untagged(BYE + " Too many failed logins");
+		bye("Too many failed logins");
 	}
 
 	private void openStreams() throws IOException {
@@ -241,7 +239,61 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		if (idling) {
 			return false; // IDLE polls for mailbox changes
 		}
-		return System.currentTimeMillis() - in.getLastReceived() < getImapServer().getAutologout();
+		return !isIdleTooLong(); // the server's limit, set from autologout
+	}
+
+	/** The client was last heard from when the reader last received a byte. */
+	@Override
+	protected long getLastActivityTime() {
+		return in == null ? super.getLastActivityTime() : in.getLastReceived();
+	}
+
+	/**
+	 * Set once a {@code * BYE} has been sent, so the session says goodbye only once (the session and
+	 * the server may both try). A flag, not a lock: a virtual thread must not block on the socket
+	 * while holding a monitor.
+	 */
+	private final java.util.concurrent.atomic.AtomicBoolean byeSent = new java.util.concurrent.atomic.AtomicBoolean();
+
+	/**
+	 * The server is closing the session: {@code * BYE} with why (RFC 9051 section 7.1.5), once.
+	 * Called by the session itself when it is idle too long (autologout), and by the server when it
+	 * stops or the login time limit is reached.
+	 */
+	@Override
+	public void replyClosing(us.bringardner.parley.net.server.CloseReason reason) throws IOException {
+		if (out == null) {
+			return;
+		}
+		String text;
+		switch (reason) {
+			case SERVER_STOPPING:
+				text = "Server shutting down";
+				break;
+			case LOGIN_TIME_LIMIT:
+				text = "No login in time";
+				break;
+			default:
+				text = "Autologout; idle for too long";
+				break;
+		}
+		if (bye(text)) {
+			flush();
+		}
+	}
+
+	/**
+	 * Send {@code * BYE text}, unless a BYE has already been sent (LOGOUT, the server closing the
+	 * session): a session says goodbye once.
+	 *
+	 * @return true if it was sent
+	 */
+	public boolean bye(String text) throws IOException {
+		if (!byeSent.compareAndSet(false, true)) {
+			return false;
+		}
+		untagged(BYE + " " + text);
+		return true;
 	}
 
 	private void dispatch(ImapRequest req) throws IOException {
@@ -1000,16 +1052,15 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	public boolean idle(ImapRequest req) throws IOException {
 		continuation("idling");
 		idling = true;
-		long start = System.currentTimeMillis();
 		try {
 			while (!stopping) {
 				byte[] line;
 				try {
 					line = in.readLine(1024);
 				} catch (SocketTimeoutException e) {
-					if (System.currentTimeMillis() - start > getImapServer().getAutologout()) {
-						untagged(BYE + " Autologout; idle for too long");
-						flush();
+					if (isIdleTooLong()) {
+						// RFC 9051 section 6.3.13: an idling client is still logged out after autologout
+						replyClosing(us.bringardner.parley.net.server.CloseReason.IDLE);
 						states.moveTo(State.LOGOUT);
 						return false;
 					}
