@@ -128,6 +128,17 @@ public class TestImapAcl {
 	}
 
 	@Test
+	public void aGroupsNameIsNoUsersName() throws Exception {
+		try (ImapClient a = login("alice@x.us")) {
+			assertTrue(tagged(a.cmd("SETACL INBOX sales@x.us lr")).contains("NO"), "a bare name is a user's; a group is $sales@x.us");
+			assertEquals("* ACL INBOX alice@x.us lrswipkxteacd", a.ok("GETACL INBOX").get(0), "nothing was stored");
+			assertTrue(tagged(a.cmd("SELECT \"Other Users/sales@x.us\"")).contains("NO [NONEXISTENT]"), "a group has no mail store");
+			assertTrue(tagged(a.cmd("STATUS \"Other Users/sales@x.us/INBOX\" (MESSAGES)")).contains("NO"));
+			assertFalse(any(a.ok("LIST \"Other Users/sales@x.us/\" \"*\""), "sales@x.us"));
+		}
+	}
+
+	@Test
 	public void sharedMailboxesAreInOtherUsers() throws Exception {
 		try (ImapClient a = login("alice@x.us")) {
 			a.ok("SETACL Projects bob@x.us lr");

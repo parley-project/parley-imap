@@ -55,9 +55,9 @@ final class AclSupport {
 			int at = g.indexOf('@');
 			return at > 0 && at < g.length() - 1 ? id : null;
 		}
-		ParleyPrincipal u = p.getServer().requireUserRegistry().findPrincipal(who);
-		// a group is named with $; a bare name is a user's
-		return u == null || u.isGroup() ? null : (negative ? "-" : "") + u.getName();
+		// a group is named with $; a bare name is a user's, so findUser leaves groups out
+		ParleyPrincipal u = p.getServer().requireUserRegistry().findUser(who);
+		return u == null ? null : (negative ? "-" : "") + u.getName();
 	}
 
 	/** Check the a right; replies NO and returns null without it. */
