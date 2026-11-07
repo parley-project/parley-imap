@@ -226,7 +226,7 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 					throw new ConnectionLostException(e);
 				}
 			}
-		});
+		}, getOutputLock());
 		reader = new ImapCommandReader(in, out, () -> getImapServer().getFileSourceFactory().createTempFile("imap", ".lit"));
 		reader.setAppendLimit(getImapServer().getAppendLimit());
 	}
@@ -262,6 +262,17 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 	 */
 	@Override
 	public void replyClosing(us.bringardner.parley.net.server.CloseReason reason) throws IOException {
+		// under the output lock: after any response being written, and BYE's once-only check is one step
+		java.util.concurrent.locks.ReentrantLock lock = getOutputLock();
+		lock.lock();
+		try {
+			sayGoodbye(reason);
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	private void sayGoodbye(us.bringardner.parley.net.server.CloseReason reason) throws IOException {
 		if (out == null) {
 			return;
 		}

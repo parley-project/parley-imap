@@ -8,7 +8,9 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Writes the server side of an IMAP connection. Output is buffered; responses
- * are sent by {@link #flush()}. Only the session's own thread writes.
+ * are sent by {@link #flush()}. Given the session's output lock, it holds it from the first
+ * write of a response to its flush, literals included, so a goodbye from another thread comes
+ * before or after a response, never inside it.
  */
 public final class ImapOutput {
 
@@ -16,8 +18,17 @@ public final class ImapOutput {
 
 	private final OutputStream out;
 
+	/** Without a lock: only one thread writes. */
 	public ImapOutput(OutputStream socketOut) {
 		this.out = IoUtils.buffered(socketOut);
+	}
+
+	/**
+	 * @param socketOut the connection's output
+	 * @param outputLock the session's output lock, held from a response's first write to its flush
+	 */
+	public ImapOutput(OutputStream socketOut, java.util.concurrent.locks.ReentrantLock outputLock) {
+		this.out = new us.bringardner.parley.net.server.SessionOutputStream(IoUtils.buffered(socketOut), outputLock);
 	}
 
 	public ImapOutput write(String s) throws IOException {
