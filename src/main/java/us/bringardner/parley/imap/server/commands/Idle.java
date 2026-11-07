@@ -19,4 +19,10 @@ public class Idle extends BaseCommand {
 		r.end();
 		p.idle(r);
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

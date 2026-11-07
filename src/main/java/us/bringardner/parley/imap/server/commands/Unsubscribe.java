@@ -21,4 +21,10 @@ public class Unsubscribe extends BaseCommand {
 		store(p).unsubscribe(name);
 		p.ok(r, "UNSUBSCRIBE completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

@@ -44,4 +44,10 @@ public class Close extends BaseCommand {
 		p.deselect();
 		p.ok(r, "CLOSE completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }

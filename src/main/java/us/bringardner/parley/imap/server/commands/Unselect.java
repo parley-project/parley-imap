@@ -20,4 +20,10 @@ public class Unselect extends BaseCommand {
 		p.deselect();
 		p.ok(r, "UNSELECT completed");
 	}
+
+	/** Neither reads nor changes mail, so it needs no permission. */
+	@Override
+	public boolean requiresAuthorization() {
+		return false;
+	}
 }
