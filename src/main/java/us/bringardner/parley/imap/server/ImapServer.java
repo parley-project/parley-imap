@@ -171,7 +171,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 				return ret;
 			}
 		});
-		// sessions read the socket themselves and do their own autologout
+		// sessions read the socket through their own reader and do their own autologout
 		setMaxIdleConnection(Long.MAX_VALUE / 2);
 
 		initAutologout(propertyName(AUTOLOGOUT), DEFAULT_AUTOLOGOUT);
