@@ -35,7 +35,7 @@ public class TestSharedImapStore {
 	@BeforeAll
 	public static void start() throws Exception {
 		String keystore = java.nio.file.Files.createTempDirectory("parley-imap-shared").resolve("keystore.p12").toString();
-		ServerTestSupport.writeKeystore(new File(keystore));
+		ServerTestSupport.writeKeystore(FileSource.of(new File(keystore)));
 		System.setProperty("parley.mail.imap.keyStoreName", keystore);
 		System.setProperty("parley.mail.imap.keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
 		System.setProperty("parley.mail.imap.keyStoreType", "PKCS12");
