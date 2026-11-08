@@ -25,7 +25,7 @@ public class Authenticate extends NoAuthReqBaseCommand {
 	private static final long serialVersionUID = 1L;
 
 	/** Every mechanism known; the authenticator limits what is offered. */
-	private static final SaslMechanisms MECHANISMS = SaslMechanisms.standard("imap");
+	private static final SaslMechanisms MECHANISMS = SaslMechanisms.standard();
 
 	public Authenticate() {
 		super("AUTHENTICATE", NOT_AUTHENTICATED);

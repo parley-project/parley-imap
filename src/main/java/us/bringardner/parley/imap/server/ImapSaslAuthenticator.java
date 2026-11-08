@@ -12,8 +12,8 @@ import us.bringardner.parley.net.sasl.ScramMechanism;
  * and then opens the mail store.
  * <p>
  * PLAIN is served, and SCRAM-SHA-1 and SCRAM-SHA-256 when the user registry keeps SCRAM
- * credentials for every user. LOGIN isn't an IMAP mechanism here, and CRAM-MD5 needs the clear
- * password, which a hash can't give, so neither is served.
+ * credentials for every user. LOGIN isn't an IMAP mechanism here, so it isn't served (nor are
+ * CRAM-MD5 and XOAUTH2, which no Parley server offers since 2.0.0).
  * <p>
  * One instance per AUTHENTICATE command.
  */
