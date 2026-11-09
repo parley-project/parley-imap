@@ -80,7 +80,7 @@ public class TestImapClient {
 
 	@BeforeAll
 	public static void startServer() throws Exception {
-		ServerTestSupport.writeKeystore(new File(KEYSTORE));
+		ServerTestSupport.writeKeystore(FileSource.of(new File(KEYSTORE)));
 		// The server with implicit TLS (testImplicitTls) reads its settings with its own prefix
 		for (String prefix : new String[] {ImapServer.IMAP_PREFIX, ImapServer.IMAPS_PREFIX}) {
 			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
