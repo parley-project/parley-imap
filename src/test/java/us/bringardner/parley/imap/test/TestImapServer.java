@@ -55,7 +55,7 @@ public class TestImapServer {
 
 	@BeforeAll
 	public static void startServer() throws Exception {
-		ServerTestSupport.writeKeystore(new File(KEYSTORE));
+		ServerTestSupport.writeKeystore(FileSource.of(new File(KEYSTORE)));
 		for (String prefix : new String[] {"parley.mail.imap"}) {
 			System.setProperty(prefix + ".keyStoreName", KEYSTORE);
 			System.setProperty(prefix + ".keyStorePassword", ServerTestSupport.KEYSTORE_PASSWORD);
