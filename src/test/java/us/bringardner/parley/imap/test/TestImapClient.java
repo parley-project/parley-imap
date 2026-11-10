@@ -41,7 +41,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import us.bringardner.parley.core.ILogger.Level;
+import us.bringardner.parley.core.LogLevel;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.mail.Message;
@@ -95,7 +95,7 @@ public class TestImapClient {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.getLogger().setLevel(Level.ERROR);
+		server.setLogLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		port = server.getLocalPort();
 	}
@@ -191,7 +191,7 @@ public class TestImapClient {
 				tlsServer = new ImapServer(0, ImapServer.IMAP_NAME, true);
 				tlsServer.setMaildropRoot(root);
 				tlsServer.setLoginFailureDelay(0);
-				tlsServer.getLogger().setLevel(Level.ERROR);
+				tlsServer.setLogLevel(LogLevel.ERROR);
 				tlsServer.startAndWait(10000);
 			}
 		}
