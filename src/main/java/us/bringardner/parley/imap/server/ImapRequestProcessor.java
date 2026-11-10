@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import us.bringardner.parley.core.ILogger;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.iam.AuthenticationResult;
 import us.bringardner.parley.iam.AuthorizationResult;
@@ -1104,8 +1103,4 @@ public class ImapRequestProcessor extends AbstractMailProcessor implements IMAP 
 		return code == REPLY_500_GENERIC_ERROR ? BAD : OK;
 	}
 
-	@Override
-	protected ILogger getLogger(String name) {
-		return super.getLogger("ImapRequestProcessor");
-	}
 }

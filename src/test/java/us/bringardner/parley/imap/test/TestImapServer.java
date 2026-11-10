@@ -30,7 +30,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import us.bringardner.parley.core.ILogger.Level;
+import us.bringardner.parley.core.LogLevel;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.net.sasl.ISaslClient;
@@ -68,7 +68,7 @@ public class TestImapServer {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.getLogger().setLevel(Level.ERROR);
+		server.setLogLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		port = server.getLocalPort();
 	}
@@ -314,8 +314,8 @@ public class TestImapServer {
 	@Test
 	public void testAccessControlUnavailable() throws Exception {
 		server.setUserRegistry(downAcl());
-		us.bringardner.parley.core.ILogger.Level level = server.getLogger().getLevel();
-		server.getLogger().setLevel(Level.NONE);
+		us.bringardner.parley.core.LogLevel level = server.getLogLevel();
+		server.setLogLevel(LogLevel.NONE);
 		try (ImapClient c = connect()) {
 			// never counted as a failed login: the connection stays open however many times
 			for (int i = 0; i < 6; i++) {
@@ -329,7 +329,7 @@ public class TestImapServer {
 		} finally {
 			// back to the registry made from the test settings
 			server.setUserRegistry(null);
-			server.getLogger().setLevel(level);
+			server.setLogLevel(level);
 		}
 	}
 
@@ -393,7 +393,7 @@ public class TestImapServer {
 		ImapServer s = new ImapServer(0, "ImapStopServer", false);
 		try {
 			s.setMaildropRoot(stopRoot);
-			s.getLogger().setLevel(Level.ERROR);
+			s.setLogLevel(LogLevel.ERROR);
 			s.startAndWait(10000);
 			try (ImapClient c = new ImapClient(s.getLocalPort())) {
 				s.stop();
@@ -999,9 +999,9 @@ public class TestImapServer {
 	@Test
 	public void testPermissionUnavailable() throws Exception {
 		reset("tony");
-		us.bringardner.parley.core.ILogger.Level level = server.getLogger().getLevel();
+		us.bringardner.parley.core.LogLevel level = server.getLogLevel();
 		try (ImapClient c = login("tony", "secret")) {
-			server.getLogger().setLevel(Level.NONE);
+			server.setLogLevel(LogLevel.NONE);
 			server.setUserRegistry(downAcl());
 			String reply = tagged(c.cmd("SELECT INBOX"));
 			assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
@@ -1011,7 +1011,7 @@ public class TestImapServer {
 			c.ok("SELECT INBOX");
 		} finally {
 			server.setUserRegistry(null);
-			server.getLogger().setLevel(level);
+			server.setLogLevel(level);
 		}
 	}
 

@@ -90,7 +90,6 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	public ImapServer(int port, String name, boolean secure) {
 		super(port, name, secure ? IMAPS_PREFIX : IMAP_PREFIX, secure);
 		initMe();
-		finishInit();
 	}
 
 	@Override
@@ -173,7 +172,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 			@Override
 			public IProcessor getProcessor() {
 				ImapRequestProcessor ret = new ImapRequestProcessor();
-				ret.getLogger().setLevel(ImapServer.this.getLogger().getLevel());
+				ret.setLogLevel(ImapServer.this.getLogLevel());
 				return ret;
 			}
 		});

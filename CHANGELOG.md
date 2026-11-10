@@ -2,6 +2,12 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-10: logging through System.Logger, To-Do 19.5)
+
+- **Logging through `System.Logger`** (parley-core): `ImapRequestProcessor` logs under its class
+  name (no longer `ImapRequestProcessor`); levels are set per object with `setLogLevel`. `ImapServer` no longer calls
+  `finishInit()` (removed from parley-mail), so it no longer sets INFO on itself.
+
 ### Changed (2026-11-06: users, logins and permissions come from parley-iam)
 
 - **parley-imap uses parley-iam and the new parley-net**: users, logins and permissions come from the server's
