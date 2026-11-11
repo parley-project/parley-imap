@@ -13,7 +13,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import us.bringardner.parley.core.ILogger.Level;
+import us.bringardner.parley.core.LogLevel;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.imap.server.ImapServer;
@@ -46,7 +46,7 @@ public class TestSharedImapStore {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.getLogger().setLevel(Level.ERROR);
+		server.setLogLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		other = new AnotherServer(root, "other");
 	}
