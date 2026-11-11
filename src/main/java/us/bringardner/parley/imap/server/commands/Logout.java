@@ -17,6 +17,8 @@ public class Logout extends NoAuthReqBaseCommand {
 	@Override
 	public void execute(ImapRequestProcessor p, ImapRequest r) throws IOException {
 		r.end();
+		// for the server's "Disconnected" line
+		p.setCloseReason(us.bringardner.parley.net.server.SessionLog.REASON_CLIENT_QUIT);
 		p.bye("Logging out");
 		p.endSession();
 		p.tagged(r.getTag(), OK, "LOGOUT completed");
