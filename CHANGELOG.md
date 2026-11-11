@@ -2,6 +2,11 @@
 
 ## parley-imap 2.0.0 (unreleased)
 
+### Changed (2026-11-11: session IDs in the log, To-Do 19.7)
+
+- **LOGOUT says so in the log**: with parley-net's session IDs, the server's disconnect line for a session
+  the client ended reads `Disconnected (client quit) after ...`.
+
 ### Changed (2026-11-10: logging through System.Logger, To-Do 19.5)
 
 - **Logging through `System.Logger`** (parley-core): `ImapRequestProcessor` logs under its class
