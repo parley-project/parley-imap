@@ -1028,4 +1028,58 @@ public class TestImapServer {
 			server.setMaxLoginAttempts(3);
 		}
 	}
+
+	/** To-Do 19.7: IMAP LOGOUT is the reason in the server's disconnect line. */
+	@Test
+	public void testQuitIsTheReasonInTheDisconnectLine() throws Exception {
+		LogLevel level = server.getLogLevel();
+		java.util.List<String> lines = new java.util.concurrent.CopyOnWriteArrayList<>();
+		java.util.logging.Handler handler = new java.util.logging.Handler() {
+			@Override
+			public void publish(java.util.logging.LogRecord record) {
+				if (record != null && record.getMessage() != null) {
+					lines.add(record.getMessage());
+				}
+			}
+
+			@Override
+			public void flush() {
+			}
+
+			@Override
+			public void close() {
+			}
+		};
+		java.util.logging.Logger root = java.util.logging.Logger.getLogger("");
+		root.addHandler(handler);
+		server.setLogLevel(LogLevel.INFO);
+		try (java.net.Socket socket = new java.net.Socket("localhost", server.getLocalPort())) {
+			socket.setSoTimeout(10000);
+			java.io.BufferedReader in = new java.io.BufferedReader(
+					new java.io.InputStreamReader(socket.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+			assertNotNull(in.readLine(), "the greeting");
+			socket.getOutputStream().write("a1 LOGOUT\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			socket.getOutputStream().flush();
+			while (in.readLine() != null) {
+				// the goodbye, then the server closes the connection
+			}
+			String line = null;
+			long end = System.currentTimeMillis() + 10000;
+			while (line == null && System.currentTimeMillis() < end) {
+				for (String l : lines) {
+					if (l.contains("Disconnected (")) {
+						line = l;
+					}
+				}
+				if (line == null) {
+					Thread.sleep(20);
+				}
+			}
+			assertNotNull(line, "no disconnect line in " + lines);
+			assertTrue(line.startsWith("[" + server.getName() + "-") && line.contains("] Disconnected (client quit) after "), line);
+		} finally {
+			server.setLogLevel(level);
+			root.removeHandler(handler);
+		}
+	}
 }
