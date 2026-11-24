@@ -172,7 +172,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 			@Override
 			public IProcessor getProcessor() {
 				ImapRequestProcessor ret = new ImapRequestProcessor();
-				ret.setLogLevel(ImapServer.this.getLogLevel());
+				ret.useConfigurationOf(ImapServer.this);
 				return ret;
 			}
 		});
