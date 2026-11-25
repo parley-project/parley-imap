@@ -93,6 +93,16 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	}
 
 	@Override
+	protected String getSettingsFileName() {
+		return "parley-imap.properties";
+	}
+
+	@Override
+	protected String getSettingsFileProperty() {
+		return CONFIG_PROP;
+	}
+
+	@Override
 	protected String getRootProperty() {
 		return ROOT_PROP;
 	}
@@ -137,34 +147,19 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 	 * runs (MailServerMain).
 	 */
 	public static void main(String[] args) throws Exception {
-		ServerMain.run("ImapServer", args, CONFIG_PROP, "parley-imap.properties", () -> {
+		ServerMain.run("ImapServer", args, () -> {
 			java.util.List<ServerMain.Service> ret = new java.util.ArrayList<>();
 			{
-				int p = standalonePort(IMAP_PREFIX, IMAP.IMAP_PORT);
+				int p = IMAP.IMAP_PORT;
 				ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, false), "IMAP server", "imap"));
 			}
-			if (hasKeyStore(IMAPS_PREFIX)) {
-				int p = standalonePort(IMAPS_PREFIX, IMAP.IMAPS_PORT);
-				ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)", "imaps"));
-			} else {
-				System.err.println("Warning: IMAP server (implicit TLS) is skipped: no TLS key store (set " + MAIL_TLS_KEY_STORE_PROP + " or " + IMAPS_PREFIX + ".keyStoreName)");
-			}
+			int p = IMAP.IMAPS_PORT;
+			ret.add(ServerMain.optional(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)", "imaps")));
 			return ret;
 		});
 	}
 
-	/** A server's port in a standalone process: {@code <prefix>.port}, else its standard port */
-	private static int standalonePort(String prefix, int standard) {
-		String v = System.getProperty(prefix + ".port");
-		return v == null || v.trim().isEmpty() ? standard : Integer.parseInt(v.trim());
-	}
 
-	/** A TLS key store for this server in a standalone process: the suite's, or its own */
-	private static boolean hasKeyStore(String prefix) {
-		String a = System.getProperty(MAIL_TLS_KEY_STORE_PROP);
-		String b = System.getProperty(prefix + ".keyStoreName");
-		return (a != null && !a.trim().isEmpty()) || (b != null && !b.trim().isEmpty());
-	}
 
 	private void initMe() {
 		setName("ImapServer");
