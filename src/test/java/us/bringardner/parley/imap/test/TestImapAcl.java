@@ -41,7 +41,7 @@ public class TestImapAcl {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.setLogLevel(LogLevel.ERROR);
+		server.getLogger().setLevel(LogLevel.ERROR);
 		server.setUserRegistry(ServerTestSupport.registry(
 				"alice@x.us, pw, READ|WRITE",
 				"s1@x.us, pw, READ|WRITE, maildrop=shared/box",

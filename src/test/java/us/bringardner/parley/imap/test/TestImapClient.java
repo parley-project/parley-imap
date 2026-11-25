@@ -95,7 +95,7 @@ public class TestImapClient {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.setLogLevel(LogLevel.ERROR);
+		server.getLogger().setLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		port = server.getLocalPort();
 	}
@@ -191,7 +191,7 @@ public class TestImapClient {
 				tlsServer = new ImapServer(0, ImapServer.IMAP_NAME, true);
 				tlsServer.setMaildropRoot(root);
 				tlsServer.setLoginFailureDelay(0);
-				tlsServer.setLogLevel(LogLevel.ERROR);
+				tlsServer.getLogger().setLevel(LogLevel.ERROR);
 				tlsServer.startAndWait(10000);
 			}
 		}

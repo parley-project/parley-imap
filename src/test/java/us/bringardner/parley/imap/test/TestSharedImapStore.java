@@ -46,7 +46,7 @@ public class TestSharedImapStore {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.setLogLevel(LogLevel.ERROR);
+		server.getLogger().setLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		other = new AnotherServer(root, "other");
 	}

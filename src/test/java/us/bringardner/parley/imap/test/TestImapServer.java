@@ -68,7 +68,7 @@ public class TestImapServer {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.setLogLevel(LogLevel.ERROR);
+		server.getLogger().setLevel(LogLevel.ERROR);
 		server.startAndWait(10000);
 		port = server.getLocalPort();
 	}
@@ -314,8 +314,8 @@ public class TestImapServer {
 	@Test
 	public void testAccessControlUnavailable() throws Exception {
 		server.setUserRegistry(downAcl());
-		us.bringardner.parley.core.LogLevel level = server.getLogLevel();
-		server.setLogLevel(LogLevel.NONE);
+		us.bringardner.parley.core.LogLevel level = server.getLogger().getLevel();
+		server.getLogger().setLevel(LogLevel.NONE);
 		try (ImapClient c = connect()) {
 			// never counted as a failed login: the connection stays open however many times
 			for (int i = 0; i < 6; i++) {
@@ -329,7 +329,7 @@ public class TestImapServer {
 		} finally {
 			// back to the registry made from the test settings
 			server.setUserRegistry(null);
-			server.setLogLevel(level);
+			server.getLogger().setLevel(level);
 		}
 	}
 
@@ -393,7 +393,7 @@ public class TestImapServer {
 		ImapServer s = new ImapServer(0, "ImapStopServer", false);
 		try {
 			s.setMaildropRoot(stopRoot);
-			s.setLogLevel(LogLevel.ERROR);
+			s.getLogger().setLevel(LogLevel.ERROR);
 			s.startAndWait(10000);
 			try (ImapClient c = new ImapClient(s.getLocalPort())) {
 				s.stop();
@@ -999,9 +999,9 @@ public class TestImapServer {
 	@Test
 	public void testPermissionUnavailable() throws Exception {
 		reset("tony");
-		us.bringardner.parley.core.LogLevel level = server.getLogLevel();
+		us.bringardner.parley.core.LogLevel level = server.getLogger().getLevel();
 		try (ImapClient c = login("tony", "secret")) {
-			server.setLogLevel(LogLevel.NONE);
+			server.getLogger().setLevel(LogLevel.NONE);
 			server.setUserRegistry(downAcl());
 			String reply = tagged(c.cmd("SELECT INBOX"));
 			assertTrue(reply.contains("NO [UNAVAILABLE]"), reply);
@@ -1011,7 +1011,7 @@ public class TestImapServer {
 			c.ok("SELECT INBOX");
 		} finally {
 			server.setUserRegistry(null);
-			server.setLogLevel(level);
+			server.getLogger().setLevel(level);
 		}
 	}
 
@@ -1032,7 +1032,7 @@ public class TestImapServer {
 	/** To-Do 19.7: IMAP LOGOUT is the reason in the server's disconnect line. */
 	@Test
 	public void testQuitIsTheReasonInTheDisconnectLine() throws Exception {
-		LogLevel level = server.getLogLevel();
+		LogLevel level = server.getLogger().getLevel();
 		java.util.List<String> lines = new java.util.concurrent.CopyOnWriteArrayList<>();
 		java.util.logging.Handler handler = new java.util.logging.Handler() {
 			@Override
@@ -1052,7 +1052,7 @@ public class TestImapServer {
 		};
 		java.util.logging.Logger root = java.util.logging.Logger.getLogger("");
 		root.addHandler(handler);
-		server.setLogLevel(LogLevel.INFO);
+		server.getLogger().setLevel(LogLevel.INFO);
 		try (java.net.Socket socket = new java.net.Socket("localhost", server.getLocalPort())) {
 			socket.setSoTimeout(10000);
 			java.io.BufferedReader in = new java.io.BufferedReader(
@@ -1078,7 +1078,7 @@ public class TestImapServer {
 			assertNotNull(line, "no disconnect line in " + lines);
 			assertTrue(line.startsWith("[" + server.getName() + "-") && line.contains("] Disconnected (client quit) after "), line);
 		} finally {
-			server.setLogLevel(level);
+			server.getLogger().setLevel(level);
 			root.removeHandler(handler);
 		}
 	}
