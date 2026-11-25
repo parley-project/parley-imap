@@ -154,7 +154,7 @@ public class ImapServer extends AbstractMailServer implements IMAP {
 				ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, false), "IMAP server", "imap"));
 			}
 			int p = IMAP.IMAPS_PORT;
-			ret.add(ServerMain.optional(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)", "imaps")));
+			ret.add(us.bringardner.parley.mail.server.MailServerMain.service(new ImapServer(p, IMAP_NAME, true), "IMAP server (implicit TLS)", "imaps"));
 			return ret;
 		});
 	}
