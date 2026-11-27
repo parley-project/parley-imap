@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import us.bringardner.parley.core.LogLevel;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.imap.server.ImapServer;
@@ -41,7 +40,6 @@ public class TestImapAcl {
 		server = new ImapServer(0, ImapServer.IMAP_NAME, false);
 		server.setMaildropRoot(root);
 		server.setLoginFailureDelay(0);
-		server.getLogger().setLevel(LogLevel.ERROR);
 		server.setUserRegistry(ServerTestSupport.registry(
 				"alice@x.us, pw, READ|WRITE",
 				"s1@x.us, pw, READ|WRITE, maildrop=shared/box",
